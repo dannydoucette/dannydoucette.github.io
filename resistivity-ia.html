@@ -205,7 +205,7 @@ function drawRuler() {
       ctx.font = '12px Arial';
       ctx.fillStyle = '#333';
       ctx.textAlign = 'center';
-      const labelX = (mm === 0) ? px + 5 : px;
+      const labelX = (mm === 0) ? px + 7 : px;
       ctx.fillText(mm / 10, labelX, rulerY + 24);
     }
   }
@@ -213,7 +213,7 @@ function drawRuler() {
   ctx.font = '12px Arial';
   ctx.fillStyle = '#555';
   ctx.textAlign = 'left';
-  ctx.fillText('cm', rulerX + totalCm * cmPx + 5, rulerY + 17.4);
+  ctx.fillText('cm', rulerX + 14, rulerY + 24);
   ctx.restore();
 }
 
