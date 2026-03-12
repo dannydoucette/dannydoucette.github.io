@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Davisson-Germer Experiment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com/">
+  <link href="Davisson-Germer%20Experiment_files/css2.css" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #e8e8ec;
+      width: 100vw; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Mono', monospace;
+      overflow: hidden;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(80,40,180,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(80,40,180,0.05) 1px, transparent 1px);
+      background-size: 40px 40px; pointer-events: none;
+    }
+
+    #app {
+      display: flex; flex-direction: row;
+      border: 1px solid rgba(80,40,180,0.18);
+      box-shadow: 0 4px 32px rgba(80,40,180,0.10);
+      background: #ffffff; overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    #left-panel {
+      width: 30%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start;
+      gap: 22px;
+      border-right: 1px solid rgba(80,40,180,0.12);
+      flex-shrink: 0;
+      padding-top: 3%; padding-left: 14px; padding-right: 14px; padding-bottom: 18px;
+      background: #f7f5ff;
+    }
+
+    #panel-title {
+      color: rgba(60,30,140,0.75);
+      font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase;
+      text-align: center; line-height: 1.5;
+      border-bottom: 1px solid rgba(80,40,180,0.12);
+      padding-bottom: 14px; width: 100%;
+    }
+
+    #panel-attribution {
+      margin-top: auto;
+      text-align: center;
+      color: rgba(60,30,140,0.35);
+      font-size: 0.5rem; line-height: 1.8;
+      letter-spacing: 0.05em;
+    }
+
+    .control-group {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 8px; width: 100%;
+    }
+
+    .label {
+      color: rgba(60,30,140,0.5);
+      font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase;
+    }
+
+    .slider-row { display: flex; align-items: center; gap: 10px; }
+    .value-display { color: #4a2db0; font-size: 0.9rem; min-width: 3ch; text-align: right; }
+
+    input[type=range] {
+      -webkit-appearance: none; width: 110px; height: 2px;
+      background: #ddd8f5; border-radius: 2px; outline: none; cursor: pointer; position: relative;
+    }
+    input[type=range]::before {
+      content: ''; position: absolute; left: 0; top: 0; height: 100%;
+      width: var(--fill, 33%); background: #6d3fd6; border-radius: 2px; pointer-events: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+      background: #6d3fd6; box-shadow: 0 0 6px rgba(109,63,214,0.4);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+    input[type=range]::-moz-range-thumb {
+      width: 13px; height: 13px; border-radius: 50%;
+      background: #6d3fd6; border: none; cursor: pointer;
+    }
+
+    .check-label {
+      display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none;
+    }
+    .check-label input[type=checkbox] { display: none; }
+    .check-box {
+      width: 14px; height: 14px; border-radius: 3px;
+      border: 1.5px solid rgba(60,30,140,0.3); background: #fff;
+      position: relative; flex-shrink: 0; transition: background 0.15s, border-color 0.15s;
+    }
+    .check-label input:checked + .check-box { background: #6d3fd6; border-color: #6d3fd6; }
+    .check-label input:checked + .check-box::after {
+      content: ''; position: absolute;
+      left: 3px; top: 0px; width: 5px; height: 9px;
+      border: 2px solid #fff; border-top: none; border-left: none;
+      transform: rotate(42deg);
+    }
+    .check-text { color: rgba(40,20,100,0.75); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+    .toggle-row { display: flex; align-items: center; gap: 8px; }
+    .toggle-opt {
+      color: rgba(60,30,140,0.3); font-size: 0.55rem; letter-spacing: 0.12em;
+      text-transform: uppercase; transition: color 0.2s; user-select: none;
+    }
+    .toggle-opt.active { color: #4a2db0; }
+    .toggle-track {
+      width: 38px; height: 20px; border-radius: 10px;
+      background: #ddd8f5; border: 1px solid rgba(109,63,214,0.3);
+      position: relative; cursor: pointer; transition: background 0.2s;
+    }
+    .toggle-track.wave-mode { background: rgba(109,63,214,0.2); }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #6d3fd6; box-shadow: 0 0 5px rgba(109,63,214,0.4);
+      transition: left 0.2s ease;
+    }
+    .toggle-thumb.right { left: 21px; }
+
+    .picker-row { display: flex; gap: 6px; }
+    .pick-btn {
+      width: 26px; height: 26px; border-radius: 4px;
+      border: 1.5px solid rgba(60,30,140,0.2);
+      background: #fff; color: rgba(60,30,140,0.45);
+      font-family: 'DM Mono', monospace; font-size: 0.7rem;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .pick-btn:hover { border-color: #6d3fd6; color: #4a2db0; }
+    .pick-btn.active {
+      background: #6d3fd6; border-color: #6d3fd6;
+      color: #fff; box-shadow: 0 0 6px rgba(109,63,214,0.4);
+    }
+
+    /* ── Right panel ── */
+    #right-panel { position: relative; width: 70%; height: 100%; flex-shrink: 0; background: #fff; }
+    #c { display: block; position: absolute; inset: 0; }
+
+    #electron-source {
+      position: absolute; left: 50%; top: 6%; transform: translateX(-50%);
+      border: 1.5px solid rgba(30,120,220,0.7);
+      background: rgba(220,235,255,0.95);
+      color: rgba(20,80,180,0.9);
+      font-size: 0.55rem; letter-spacing: 0.15em; text-transform: uppercase;
+      padding: 5px 13px; border-radius: 3px;
+      box-shadow: 0 0 10px rgba(30,120,220,0.12);
+      white-space: nowrap; pointer-events: none; z-index: 2;
+    }
+
+    #interference-box {
+      position: absolute;
+      top: 10px; left: 10px;
+      width: 140px;
+      border: 1.5px solid rgba(80,40,180,0.35);
+      border-radius: 5px;
+      background: rgba(247,245,255,0.97);
+      box-shadow: 0 2px 12px rgba(80,40,180,0.10);
+      overflow: hidden;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .ibox-label {
+      display: block;
+      background: rgba(109,63,214,0.1);
+      border-bottom: 1px solid rgba(80,40,180,0.18);
+      color: rgba(60,30,140,0.7);
+      font-size: 0.5rem; letter-spacing: 0.2em; text-transform: uppercase;
+      padding: 5px 8px;
+      text-align: center;
+    }
+    #ibox-canvas {
+      display: block;
+      width: 100%;
+      height: 100px;
+    }
+  </style>
+</head>
+<body data-new-gr-c-s-check-loaded="8.936.0" data-gr-ext-installed="">
+
+  <div id="app" style="width: 1001.93px; height: 751.45px;">
+    <!-- Left 30% -->
+    <div id="left-panel">
+
+      <div id="panel-title">Davisson-Germer<br>Experiment</div>
+
+      <div class="control-group">
+        <span class="label">atomic spacing</span>
+        <div class="slider-row">
+          <input type="range" id="spacing" min="20" max="50" value="30" style="--fill: 33.33333333333333%;">
+          <span class="value-display" id="val-spacing">30</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="check-label">
+          <input type="checkbox" id="show-scattering">
+          <span class="check-box"></span>
+          <span class="check-text">Show scattering</span>
+        </label>
+      </div>
+
+      <div class="control-group">
+        <span class="label">mode</span>
+        <div class="toggle-row">
+          <span class="toggle-opt active" id="lbl-particle">particle</span>
+          <div class="toggle-track" id="mode-toggle">
+            <div class="toggle-thumb" id="toggle-thumb"></div>
+          </div>
+          <span class="toggle-opt" id="lbl-wave">wave</span>
+        </div>
+      </div>
+
+      <!-- Wave-only controls -->
+      <div id="wave-only" style="display:none; flex-direction:column; align-items:center; gap:22px; width:100%;">
+
+        <div class="control-group">
+          <span class="label">highlight arrow</span>
+          <div class="picker-row">
+            <button class="pick-btn active" data-n="0">–</button>
+            <button class="pick-btn" data-n="1">1</button>
+            <button class="pick-btn" data-n="2">2</button>
+            <button class="pick-btn" data-n="3">3</button>
+            <button class="pick-btn" data-n="4">4</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="check-label">
+            <input type="checkbox" id="show-waves">
+            <span class="check-box"></span>
+            <span class="check-text">Show waves</span>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <span class="label">wavelength</span>
+          <div class="slider-row">
+            <input type="range" id="wavelength" min="20" max="50" value="30" style="--fill: 33.33333333333333%;">
+            <span class="value-display" id="val-wavelength">30</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="panel-attribution">
+        Danny Doucette<br>thinkib.net/physics
+      </div>
+
+    </div>
+
+    <div id="right-panel">
+      <div id="electron-source"><span>electron source</span></div>
+      <div id="interference-box" style="display:none;">
+        <span class="ibox-label">Interference</span>
+        <canvas id="ibox-canvas"></canvas>
+      </div>
+      <canvas id="c" width="700" height="749"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // ── 4:3 sizing ──
+    const app = document.getElementById('app');
+    function sizeApp() {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      let w, h;
+      if (vw / vh > 4/3) { h = vh * 0.95; w = h * (4/3); }
+      else               { w = vw * 0.95; h = w * (3/4); }
+      app.style.width = w + 'px';
+      app.style.height = h + 'px';
+    }
+
+    // ── Elements ──
+    const canvas        = document.getElementById('c');
+    const ctx           = canvas.getContext('2d');
+    const sliderSpacing = document.getElementById('spacing');
+    const sliderWL      = document.getElementById('wavelength');
+    const valSpacing    = document.getElementById('val-spacing');
+    const valWL         = document.getElementById('val-wavelength');
+    const showScatterCB = document.getElementById('show-scattering');
+    const showWavesCB   = document.getElementById('show-waves');
+    const modeToggle    = document.getElementById('mode-toggle');
+    const toggleThumb   = document.getElementById('toggle-thumb');
+    const lblParticle   = document.getElementById('lbl-particle');
+    const lblWave       = document.getElementById('lbl-wave');
+    const waveOnly      = document.getElementById('wave-only');
+    const iBox          = document.getElementById('interference-box');
+    const iBoxCanvas    = document.getElementById('ibox-canvas');
+    const iBoxCtx       = iBoxCanvas.getContext('2d');
+    const pickBtns      = document.querySelectorAll('.pick-btn');
+
+    // ── State ──
+    let spacing      = 30;
+    let wavelength   = 30;
+    let showScatter  = false;
+    let showWaves    = false;
+    let mode         = 'particle';
+    let waveHighlight = 0;
+    let particleChoices = [4, 4, 4, 4];
+
+    const ANGLES      = [-60, -45, -30, -15, 0, 15, 30, 45, 60];
+    const waveHLIndex = [null, 5, 6, 7, 8];
+
+    const COLS = 4, ROWS = 2, RADIUS = 18;
+    const RED_LEN  = 200;
+    const BLUE_W   = 3.6;
+    const WAVE_AMP = 8;
+
+    function randomParticleChoices() {
+      particleChoices = particleChoices.map(() => Math.floor(Math.random() * 9));
+    }
+    randomParticleChoices();
+
+    // ── Helpers ──
+    function drawArrow(x1, y1, x2, y2, color, headSize, lineWidth) {
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      ctx.save();
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lineWidth;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - headSize * Math.cos(angle - Math.PI/6), y2 - headSize * Math.sin(angle - Math.PI/6));
+      ctx.lineTo(x2 - headSize * Math.cos(angle + Math.PI/6), y2 - headSize * Math.sin(angle + Math.PI/6));
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawSineOnArrow(x1, y1, dirAngle, length, amp, wl, color, lineWidth) {
+      const steps = Math.ceil(length * 3);
+      ctx.save();
+      ctx.strokeStyle = color; ctx.lineWidth = lineWidth; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const d = t * length;
+        const offset = amp * Math.sin((d / wl) * Math.PI * 2);
+        const px = x1 + d * Math.cos(dirAngle) + offset * Math.cos(dirAngle + Math.PI/2);
+        const py = y1 + d * Math.sin(dirAngle) + offset * Math.sin(dirAngle + Math.PI/2);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSphere(x, y, r) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(80,40,180,0.15)';
+      ctx.shadowBlur = 14; ctx.shadowOffsetY = 3;
+      const bg = ctx.createRadialGradient(x-r*0.3, y-r*0.35, r*0.05, x, y, r);
+      bg.addColorStop(0, '#ede8ff'); bg.addColorStop(0.3, '#b8a0f0');
+      bg.addColorStop(0.65, '#6d3fd6'); bg.addColorStop(1, '#2a0a6a');
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fillStyle = bg; ctx.fill();
+      ctx.restore();
+
+      const sp = ctx.createRadialGradient(x-r*0.32, y-r*0.38, 0, x-r*0.3, y-r*0.3, r*0.55);
+      sp.addColorStop(0, 'rgba(255,255,255,0.8)'); sp.addColorStop(0.5, 'rgba(255,255,255,0.1)');
+      sp.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fillStyle = sp; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(x+r*0.3, y+r*0.35, r*0.12, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(109,63,214,0.22)'; ctx.fill();
+    }
+
+    function drawIBox() {
+      if (mode !== 'wave') return;
+      const W = iBoxCanvas.offsetWidth;
+      const H = iBoxCanvas.offsetHeight;
+      iBoxCanvas.width  = W;
+      iBoxCanvas.height = H;
+      iBoxCtx.clearRect(0, 0, W, H);
+
+      const color = 'rgba(0,160,255,1.0)';
+      const lw = 3.0;
+      const n = 4;
+      const ampRowH = 22; // space reserved at bottom for amplitude text
+      const lineHeight = H - 16 - ampRowH;
+      const yTop = 8;
+
+      const hlAngles = [null, 15, 30, 45, 60];
+      const phi = waveHighlight > 0
+        ? (spacing + 2 * RADIUS) * Math.sin(hlAngles[waveHighlight] * Math.PI / 180)
+        : 0;
+      const phaseOffsets = [3 * phi, 2 * phi, phi, 0];
+
+      for (let i = 0; i < n; i++) {
+        const x = (W / (n + 1)) * (i + 1);
+
+        iBoxCtx.save();
+        iBoxCtx.strokeStyle = color; iBoxCtx.lineWidth = lw;
+        iBoxCtx.beginPath();
+        iBoxCtx.moveTo(x, yTop); iBoxCtx.lineTo(x, yTop + lineHeight);
+        iBoxCtx.stroke(); iBoxCtx.restore();
+
+        if (showWaves) {
+          const steps = Math.ceil(lineHeight * 3);
+          iBoxCtx.save();
+          iBoxCtx.strokeStyle = 'rgba(0,130,220,0.92)';
+          iBoxCtx.lineWidth = 2.2; iBoxCtx.lineJoin = 'round';
+          iBoxCtx.beginPath();
+          for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            const d = t * lineHeight;
+            const phaseRad = ((d + phaseOffsets[i]) / wavelength) * Math.PI * 2;
+            const offsetX = WAVE_AMP * Math.sin(phaseRad);
+            const px = x + offsetX;
+            const py = yTop + lineHeight - d;
+            if (s === 0) iBoxCtx.moveTo(px, py); else iBoxCtx.lineTo(px, py);
+          }
+          iBoxCtx.stroke(); iBoxCtx.restore();
+        }
+      }
+
+      // Amplitude row
+      const phaseRad = (phi / wavelength) * Math.PI * 2;
+      const amplitude = Math.abs(Math.cos(phaseRad * 0.5));
+      const ampText = 'Amplitude: ' + amplitude.toFixed(2);
+      const yAmp = H - 7;
+      iBoxCtx.save();
+      iBoxCtx.font = '500 9px "DM Mono", monospace';
+      iBoxCtx.fillStyle = amplitude > 0.9 ? 'rgba(200,30,30,0.85)' : 'rgba(60,30,140,0.65)';
+      iBoxCtx.textAlign = 'center';
+      iBoxCtx.fillText(ampText, W / 2, yAmp);
+      iBoxCtx.restore();
+    }
+
+    // ── Main draw ──
+    function draw() {
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+
+      const cellW  = RADIUS*2 + spacing;
+      const cellH  = RADIUS*2 + spacing;
+      const totalW = COLS*cellW - spacing;
+      const totalH = ROWS*cellH - spacing;
+      const startX = (W - totalW) / 2 + RADIUS;
+      const startY = H * 0.75 - totalH / 2 + RADIUS;
+
+      const positions = [];
+      for (let row = 0; row < ROWS; row++)
+        for (let col = 0; col < COLS; col++)
+          positions.push({ x: startX + col*cellW, y: startY + row*cellH, row, col });
+
+      const esBox  = document.getElementById('electron-source');
+      const esRect = esBox.getBoundingClientRect();
+      const rpRect = document.getElementById('right-panel').getBoundingClientRect();
+      const esBottomY = esRect.bottom - rpRect.top;
+
+      const topSpheres = positions.filter(p => p.row === 0);
+
+      topSpheres.forEach((sp, i) => {
+        const sx = sp.x;
+        const sphereTopY = sp.y - RADIUS;
+
+        drawArrow(sx, esBottomY, sx, sphereTopY, 'rgba(30,120,220,0.85)', 8, BLUE_W);
+
+        if (!showScatter) return;
+
+        const hlIdx = (mode === 'wave') ? waveHLIndex[waveHighlight] : -1;
+        const indicesToDraw = (mode === 'particle') ? [particleChoices[i]] : ANGLES.map((_, ai) => ai);
+
+        for (const ai of indicesToDraw) {
+          const deg = ANGLES[ai];
+          const rad = (deg - 90) * Math.PI / 180;
+          const isHL = (ai === hlIdx);
+
+          let arrowLen = RED_LEN;
+          if (isHL) {
+            const hlAngles = [null, 15, 30, 45, 60];
+            const x = (spacing + RADIUS*2) * Math.sin(hlAngles[waveHighlight] * Math.PI / 180);
+            const multipliers = {
+              1: [4, 3, 2, 1],
+              2: [2, 1, 0, -1],
+              3: [2, 1, 0, -1],
+              4: [1, 0, -1, -2]
+            };
+            arrowLen = RED_LEN + multipliers[waveHighlight][i] * x;
+          }
+
+          const ex  = sx + arrowLen * Math.cos(rad);
+          const ey  = sphereTopY + arrowLen * Math.sin(rad);
+
+          let color, lw, hs;
+          if (mode === 'particle') {
+            color = 'rgba(210,40,40,0.9)'; lw = 1.9; hs = 8;
+          } else if (isHL) {
+            color = 'rgba(0,160,255,1.0)'; lw = 3.0; hs = 10;
+          } else {
+            color = 'rgba(210,40,40,0.18)'; lw = 1.0; hs = 5;
+          }
+
+          drawArrow(sx, sphereTopY, ex, ey, color, hs, lw);
+
+          if (showWaves) {
+            const wc = isHL ? 'rgba(0,130,220,0.92)' : (mode === 'particle' ? 'rgba(180,30,30,0.82)' : 'rgba(180,30,30,0.18)');
+            drawSineOnArrow(sx, sphereTopY, rad, arrowLen, WAVE_AMP, wavelength, wc, isHL ? 2.2 : 1.0);
+          }
+        }
+      });
+
+      for (const p of positions) drawSphere(p.x, p.y, RADIUS);
+      drawIBox();
+    }
+
+    function resize() {
+      sizeApp();
+      const rp = document.getElementById('right-panel');
+      canvas.width  = rp.clientWidth;
+      canvas.height = rp.clientHeight;
+      requestAnimationFrame(draw);
+    }
+
+    function updateFill(sl) {
+      const min = parseInt(sl.min), max = parseInt(sl.max), val = parseInt(sl.value);
+      sl.style.setProperty('--fill', ((val - min) / (max - min) * 100) + '%');
+    }
+
+    function updateModeUI() {
+      const isWave = mode === 'wave';
+      toggleThumb.classList.toggle('right', isWave);
+      modeToggle.classList.toggle('wave-mode', isWave);
+      lblParticle.classList.toggle('active', !isWave);
+      lblWave.classList.toggle('active', isWave);
+      waveOnly.style.display = isWave ? 'flex' : 'none';
+      iBox.style.display     = isWave ? 'block' : 'none';
+    }
+
+    // ── Wire controls ──
+    sliderSpacing.addEventListener('input', () => {
+      spacing = parseInt(sliderSpacing.value);
+      valSpacing.textContent = spacing;
+      updateFill(sliderSpacing);
+      requestAnimationFrame(draw);
+    });
+
+    sliderWL.addEventListener('input', () => {
+      wavelength = parseInt(sliderWL.value);
+      valWL.textContent = wavelength;
+      updateFill(sliderWL);
+      requestAnimationFrame(draw);
+    });
+
+    showScatterCB.addEventListener('change', () => {
+      showScatter = showScatterCB.checked;
+      if (showScatter) randomParticleChoices();
+      requestAnimationFrame(draw);
+    });
+
+    showWavesCB.addEventListener('change', () => {
+      showWaves = showWavesCB.checked;
+      requestAnimationFrame(draw);
+    });
+
+    modeToggle.addEventListener('click', () => {
+      mode = (mode === 'particle') ? 'wave' : 'particle';
+      updateModeUI();
+      if (mode === 'particle') { showWaves = false; showWavesCB.checked = false; randomParticleChoices(); }
+      requestAnimationFrame(draw);
+    });
+
+    pickBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        waveHighlight = parseInt(btn.dataset.n);
+        pickBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        requestAnimationFrame(draw);
+      });
+    });
+
+    // ── Init ──
+    window.addEventListener('resize', resize);
+    resize();
+    updateFill(sliderSpacing);
+    updateFill(sliderWL);
+  </script>
+
+</body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>

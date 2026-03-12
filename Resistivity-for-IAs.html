@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Resistivity Simulation for IB Physics Internal Assessment</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: white;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  canvas {
+    border: 1px solid #ccc;
+    display: block;
+    cursor: default;
+  }
+</style>
+</head>
+<body>
+<canvas id="sim" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+const W = 800, H = 600;
+
+// ── Layout constants ─────────────────────────────────────────────────────────
+const rulerX  = 60;
+const totalCm = 16.9;
+const cmPx    = 44;
+const rulerY  = H - 100;
+const rulerH  = 28;
+
+const stripLeft  = rulerX + cmPx * 0.5;
+const stripRight = rulerX + cmPx * (totalCm - 0.5);
+const stripY     = H - 140;
+const stripH     = 22;
+const stripMidY  = stripY + stripH / 2;
+
+// Battery geometry
+const batX = 280, batY = 55, bw = 110, bh = 36;
+const batPosX = batX + bw + 10;   // tip of positive terminal
+const batPosY = batY + 18;
+const batNegX = batX + 5;         // left side negative label x (wire starts here)
+const batNegY = batY + 18;
+
+// Ammeter geometry (top-left corner)
+const amX = 600, amY = 180, aw = 100, ah = 110;
+const circleR  = 10;
+const circleY  = amY + ah - circleR - 8;
+const circle1X = amX + aw / 2 - circleR - 6;  // left terminal
+const circle2X = amX + aw / 2 + circleR + 6;  // right terminal
+
+// ── Draggable leads ──────────────────────────────────────────────────────────
+// leadA = connected to ammeter right terminal → strip
+// leadB = connected to battery negative → strip
+// Ensure leadA.x < leadB.x always (they may not cross)
+const TRIANGLE_H = 18;
+const TRIANGLE_W = 14;
+
+let leads = {
+  a: { x: rulerX + 12 * cmPx, label: 'A' },   // ammeter side — starts at 12 cm
+  b: { x: rulerX +  2 * cmPx, label: 'B' }    // battery-neg side — starts at 2 cm
+};
+
+let dragging = null;   // 'a' | 'b' | null
+let dragOffsetX = 0;
+
+// ── Physics calculation ───────────────────────────────────────────────────────
+function calcCurrent() {
+  const L = Math.abs(leads.a.x - leads.b.x) / cmPx;
+  const R = 96 * L;
+  const I = 1000 * 1.5 / (75 + R);
+  // Box-Muller transform: Gaussian noise with std dev = 0.5 mA
+  const u1 = Math.random(), u2 = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return { L, R, I: I + z * 0.03 };
+}
+
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function leadTipY() { return stripY; }           // triangle tip touches top of strip
+function leadBaseY() { return stripY - TRIANGLE_H; }
+
+function isOnLead(mx, my, lx) {
+  const ty = leadTipY(), by = leadBaseY();
+  if (my < by - 4 || my > ty + 4) return false;
+  return Math.abs(mx - lx) < TRIANGLE_W + 4;
+}
+
+// ── Drawing ──────────────────────────────────────────────────────────────────
+function drawBattery(x, y) {
+  ctx.save();
+
+  // Body
+  ctx.fillStyle = '#d4a843';
+  ctx.fillRect(x, y, bw, bh);
+  ctx.strokeStyle = '#8a6a10';
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(x, y, bw, bh);
+
+  // Positive terminal (right nub)
+  ctx.fillStyle = '#888';
+  ctx.fillRect(x + bw, y + 8, 10, 20);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + bw, y + 8, 10, 20);
+
+  ctx.font = 'bold 14px Arial';
+  ctx.fillStyle = '#111';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // "+" near right end of body (before terminal)
+  ctx.fillText('+', x + bw - 14, y + bh / 2);
+  // "−" near left end of body
+  ctx.fillText('−', x + 10, y + bh / 2);
+
+  // Voltage label
+  ctx.font = 'bold 13px Arial';
+  ctx.fillText('1.50 V', x + bw / 2, y + bh / 2);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+function drawAmmeter(x, y) {
+  ctx.save();
+
+  // Yellow rectangle body
+  ctx.fillStyle = '#f5d800';
+  ctx.fillRect(x, y, aw, ah);
+  ctx.strokeStyle = '#b8a000';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, aw, ah);
+
+  // "Current" label at top center
+  ctx.font = 'bold 13px Arial';
+  ctx.fillStyle = '#111';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Current', x + aw / 2, y + 20);
+
+  // White display box
+  const boxW = 76, boxH = 30;
+  const boxX = x + (aw - boxW) / 2;
+  const boxY = y + 26;
+  ctx.fillStyle = 'white';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  ctx.font = 'bold 14px Arial';
+  ctx.fillStyle = '#111';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const { L, R, I } = calcCurrent();
+  ctx.fillText(I.toFixed(2) + ' mA', boxX + boxW / 2, boxY + boxH / 2);
+
+  // Two grey terminal circles at the bottom
+  [circle1X, circle2X].forEach(cx => {
+    ctx.beginPath();
+    ctx.arc(cx, circleY, circleR, 0, Math.PI * 2);
+    ctx.fillStyle = '#aaa';
+    ctx.fill();
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+function drawRuler() {
+  ctx.save();
+  ctx.fillStyle = '#fffde7';
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(rulerX, rulerY, totalCm * cmPx, rulerH);
+  ctx.strokeRect(rulerX, rulerY, totalCm * cmPx, rulerH);
+
+  const totalMm = Math.round(totalCm * 10);
+  for (let mm = 0; mm <= totalMm; mm++) {
+    const px = rulerX + mm * (cmPx / 10);
+    let tickH;
+    if (mm % 10 === 0) tickH = 14;
+    else if (mm % 5 === 0) tickH = 9;
+    else tickH = 5;
+
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = mm % 10 === 0 ? 1.5 : 0.8;
+    ctx.beginPath();
+    ctx.moveTo(px, rulerY);
+    ctx.lineTo(px, rulerY + tickH);
+    ctx.stroke();
+
+    if (mm % 10 === 0) {
+      ctx.font = '12px Arial';
+      ctx.fillStyle = '#333';
+      ctx.textAlign = 'center';
+      const labelX = (mm === 0) ? px + 5 : px;
+      ctx.fillText(mm / 10, labelX, rulerY + 24);
+    }
+  }
+
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#555';
+  ctx.textAlign = 'left';
+  ctx.fillText('cm', rulerX + totalCm * cmPx + 5, rulerY + 17.4);
+  ctx.restore();
+}
+
+function drawGraphiteStrip() {
+  ctx.save();
+  const grad = ctx.createLinearGradient(0, stripY, 0, stripY + stripH);
+  grad.addColorStop(0, '#8a8a8a');
+  grad.addColorStop(0.4, '#707070');
+  grad.addColorStop(1, '#5a5a5a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(stripLeft, stripY, stripRight - stripLeft, stripH);
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(stripLeft, stripY, stripRight - stripLeft, stripH);
+
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#333';
+  ctx.textAlign = 'center';
+  ctx.fillText('Graphite strip', (stripLeft + stripRight) / 2, stripY - 8);
+  ctx.restore();
+}
+
+function drawStripHeightArrow() {
+  // Strip height in cm = stripH / cmPx
+  const heightCm = (stripH / cmPx).toFixed(2);
+  const arrowX = stripLeft - 22;
+  const topY   = stripY;
+  const botY   = stripY + stripH;
+
+  ctx.save();
+  ctx.strokeStyle = '#333';
+  ctx.fillStyle   = '#333';
+  ctx.lineWidth   = 1.5;
+
+  // Vertical line
+  ctx.beginPath();
+  ctx.moveTo(arrowX, topY);
+  ctx.lineTo(arrowX, botY);
+  ctx.stroke();
+
+  // Top arrowhead
+  ctx.beginPath();
+  ctx.moveTo(arrowX, topY);
+  ctx.lineTo(arrowX - 4, topY + 7);
+  ctx.lineTo(arrowX + 4, topY + 7);
+  ctx.closePath();
+  ctx.fill();
+
+  // Bottom arrowhead
+  ctx.beginPath();
+  ctx.moveTo(arrowX, botY);
+  ctx.lineTo(arrowX - 4, botY - 7);
+  ctx.lineTo(arrowX + 4, botY - 7);
+  ctx.closePath();
+  ctx.fill();
+
+  // Label
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(heightCm + ' cm', arrowX, topY - 10);
+
+  ctx.restore();
+}
+
+function drawTriangleLead(lx, color) {
+  const ty = leadTipY();
+  const by = leadBaseY();
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(lx, ty);                        // tip (pointing down)
+  ctx.lineTo(lx - TRIANGLE_W / 2, by);       // top-left
+  ctx.lineTo(lx + TRIANGLE_W / 2, by);       // top-right
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Wire 1 only — drawn before ammeter
+function drawWire1() {
+  ctx.save();
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // Battery positive terminal tip → jog right to x=820 → drop down to amY-20
+  // → go left to circle1X → drop to top of circle
+  const w1startX = batX + bw + 10;   // right tip of positive terminal
+  const w1startY = batY + 18;
+
+  ctx.beginPath();
+  ctx.moveTo(w1startX, w1startY);
+  ctx.lineTo(w1startX + 100, w1startY);         // 100px right
+  ctx.lineTo(w1startX + 100, circleY);          // down to circle mid height
+  ctx.lineTo(circle1X - circleR, circleY);      // right to left edge of left circle
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Wires 2 & 3 — drawn after ammeter so they appear on top
+function drawWires23() {
+  ctx.save();
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  const leadBaseY_ = leadBaseY();
+  const routeY     = stripY - 80;    // shared horizontal routing level above strip
+
+  // ── Wire 2: Right ammeter circle (circle2X) → lead A (right/red) ──────────
+  ctx.beginPath();
+  ctx.moveTo(circle2X, circleY + circleR);   // bottom of right circle
+  ctx.lineTo(circle2X, routeY);              // drop straight down to routing level
+  ctx.lineTo(leads.a.x, routeY);            // go horizontally to lead A
+  ctx.lineTo(leads.a.x, leadBaseY_);        // drop to lead base
+  ctx.stroke();
+
+  // ── Wire 3: Battery negative left edge → lead B (left/black) ─────────────
+  const w3startX = batX;
+  const w3startY = batY + 18;
+
+  ctx.beginPath();
+  ctx.moveTo(w3startX, w3startY);
+  ctx.lineTo(rulerX,   w3startY);          // go left to rulerX
+  ctx.lineTo(rulerX,   routeY);            // drop down to routing level
+  ctx.lineTo(leads.b.x, routeY);          // go right to lead B
+  ctx.lineTo(leads.b.x, leadBaseY_);      // drop to lead base
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ── Main render ──────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.fillStyle = '#111';
+  ctx.font = 'bold 15px Arial';
+  ctx.fillText('Resistivity Simulation for IB Physics Internal Assessment', 18, 28);
+
+  // Attribution
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#444';
+  ctx.fillText('Danny Doucette', 18, H - 30);
+  ctx.fillText('thinkib.net/physics', 18, H - 16);
+
+  drawRuler();
+  drawGraphiteStrip();
+  drawStripHeightArrow();
+  drawBattery(batX, batY);
+  drawAmmeter(amX, amY);
+  drawWire1();
+  drawWires23();
+  drawTriangleLead(leads.a.x, '#e63030');   // red — ammeter side (right)
+  drawTriangleLead(leads.b.x, '#111');      // black — negative side (left)
+}
+
+// ── Drag interaction ─────────────────────────────────────────────────────────
+const GAP = 6;  // minimum pixel gap between leads
+
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if (isOnLead(mx, my, leads.a.x)) {
+    dragging = 'a';
+    dragOffsetX = mx - leads.a.x;
+    canvas.style.cursor = 'ew-resize';
+  } else if (isOnLead(mx, my, leads.b.x)) {
+    dragging = 'b';
+    dragOffsetX = mx - leads.b.x;
+    canvas.style.cursor = 'ew-resize';
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if (!dragging) {
+    // Update cursor on hover
+    if (isOnLead(mx, my, leads.a.x) || isOnLead(mx, my, leads.b.x)) {
+      canvas.style.cursor = 'ew-resize';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+    return;
+  }
+
+  const newX = mx - dragOffsetX;
+
+  if (dragging === 'a') {
+    leads.a.x = clamp(newX, leads.b.x + GAP, stripRight);
+  } else {
+    leads.b.x = clamp(newX, stripLeft, leads.a.x - GAP);
+  }
+
+  draw();
+});
+
+canvas.addEventListener('mouseup', () => {
+  dragging = null;
+  canvas.style.cursor = 'default';
+});
+
+canvas.addEventListener('mouseleave', () => {
+  dragging = null;
+  canvas.style.cursor = 'default';
+});
+
+draw();
+</script>
+</body>
+</html>

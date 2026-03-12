@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compton Scattering Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #ffffff;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #sim-container {
+    position: relative;
+    width: 800px;
+    height: 600px;
+    background: #ffffff;
+    border: 1px solid #cccccc;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  #canvas {
+    display: block;
+    width: 800px;
+    height: 600px;
+  }
+
+  #title-bar {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    font-family: Arial, sans-serif;
+    font-size: 18pt;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  #wl-panel {
+    position: absolute;
+    background: rgba(255,255,255,0.95);
+    border: 1.5px solid #aabbdd;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    white-space: nowrap;
+    z-index: 5;
+  }
+
+  #wl-panel label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 16pt;
+    color: #334;
+  }
+
+  #wl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 130px;
+    height: 4px;
+    background: linear-gradient(to right, #3b6bda, #a0b8f0);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #3b6bda;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(60,80,180,0.3);
+    cursor: pointer;
+  }
+
+  #wl-val {
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    color: #3b6bda;
+    min-width: 60px;
+  }
+
+  #info-panel {
+    position: absolute;
+    top: 50px;
+    right: 14px;
+    background: rgba(255,255,255,0.95);
+    border: 1.5px solid #aabbdd;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    color: #445;
+    line-height: 1.85;
+    z-index: 5;
+  }
+
+  .info-title {
+    font-size: 16pt;
+    color: #7a8aaa;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #e0e8f0;
+    padding-bottom: 4px;
+  }
+
+  .iv      { color: #3b6bda; }
+  .iv-gold { color: #b07800; }
+  .iv-red  { color: #cc2222; }
+
+  #status {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: Arial, sans-serif;
+    font-size: 16pt;
+    color: #667;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  #attribution {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.5;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body data-new-gr-c-s-check-loaded="8.936.0" data-gr-ext-installed="">
+
+<div id="sim-container">
+  <canvas id="canvas" width="800" height="600"></canvas>
+
+  <div id="title-bar">Compton Scattering</div>
+
+  <div id="wl-panel" style="left: 30px; top: 343px;">
+    <label>Incident wavelength</label>
+    <div id="wl-row">
+      <input type="range" id="wl-slider" min="10" max="60" value="25" step="1">
+      <span id="wl-val">0.025 nm</span>
+    </div>
+  </div>
+
+  <div id="info-panel">
+    <div class="info-title">Simulation data</div>
+    <div>λ₀ &nbsp;<span class="iv" id="i-l0">—</span></div>
+    <div>λ′ &nbsp;<span class="iv-gold" id="i-l1">—</span></div>
+    <div>Δλ &nbsp;<span class="iv-red" id="i-dl">—</span></div>
+    <div>θ &nbsp;&nbsp;<span class="iv" id="i-th">—</span></div>
+  </div>
+
+  <div id="status">Ready — press the red button to fire</div>
+
+  <div id="attribution">Danny Doucette<br>thinkib.net/physics</div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+const W = 800, H = 600;
+
+// Constants
+const COMPTON_NM = 0.002426;
+const HC_KEV_NM  = 1.23984e-3;
+
+// Layout
+const CX = W / 2, CY = H / 2;
+const E_R = 52;
+
+const SRC_W = 92, SRC_H = 46;
+const SRC_LEFT = 30;
+const SRC_MIN_Y = CY - SRC_H / 2;   // lowest (center-aligned with electron)
+const SRC_MAX_Y = SRC_MIN_Y - E_R - 1;   // highest allowed
+
+// State — start at sourceY = SRC_MIN_Y - 40
+let sourceY  = SRC_MIN_Y - 40;
+let dragging = false, dragOffY = 0;
+
+let simState    = 'idle';
+let wavePacket  = null;
+let photonSph   = null;
+let electronPos = { x: CX, y: CY };
+let electronVel = { x: 0, y: 0 };
+let scatterAngle    = 0;
+let scatteredLambda = 0;
+let pauseTimer = 0;
+let lastTs = null;
+
+// Position the wavelength panel fixed, 20px below the lowest source position
+const wlPanelEl = document.getElementById('wl-panel');
+wlPanelEl.style.left = SRC_LEFT + 'px';
+wlPanelEl.style.top  = (SRC_MIN_Y + SRC_H + 20) + 'px';
+
+// Slider
+const slider  = document.getElementById('wl-slider');
+const wlValEl = document.getElementById('wl-val');
+function sliderNm() { return +slider.value / 1000; }
+function updateWlLabel() { wlValEl.textContent = sliderNm().toFixed(3) + ' nm'; }
+slider.addEventListener('input', updateWlLabel);
+updateWlLabel();
+
+// Info panel
+function updateInfo(l0, l1, theta) {
+  document.getElementById('i-l0').textContent = l0          ? l0.toFixed(5) + ' nm' : '—';
+  document.getElementById('i-l1').textContent = l1          ? l1.toFixed(5) + ' nm' : '—';
+  document.getElementById('i-dl').textContent = (l0 && l1) ? (l1 - l0).toFixed(5) + ' nm' : '—';
+  document.getElementById('i-th').textContent = theta != null ? theta.toFixed(1) + '°' : '—';
+}
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// Reset — does NOT clear simulation data panel
+function resetSim() {
+  electronPos = { x: CX, y: CY };
+  electronVel = { x: 0, y: 0 };
+  wavePacket  = null;
+  photonSph   = null;
+  simState    = 'idle';
+  pauseTimer  = 0;
+  setStatus('Ready — press the red button to fire');
+}
+resetSim();
+
+// Fire photon — moves purely in +x direction
+function firePhoton() {
+  if (simState !== 'idle') return;
+  updateInfo(null, null, null);
+
+  const lambdaNm = sliderNm();
+  const lambdaPx = lambdaNm * W * 0.45;
+  const nozzleX  = SRC_LEFT + SRC_W + 6;
+  const nozzleY  = sourceY + SRC_H / 2;
+
+  wavePacket = {
+    x: nozzleX,
+    y: nozzleY,
+    dirX: 1, dirY: 0,
+    speed: W * 0.16,
+    lambdaPx,
+    lambdaNm,
+    numWaves: 6,
+    phase: 0,
+    isScattered: false,
+  };
+
+  simState = 'traveling';
+  updateInfo(lambdaNm, null, null);
+  setStatus('Photon in flight…');
+}
+
+// Compton shift
+function comptonShift(lambda0, thetaDeg) {
+  return lambda0 + COMPTON_NM * (1 - Math.cos(thetaDeg * Math.PI / 180));
+}
+
+// Scatter angle and directions from source position
+function computeCollision() {
+  const frac     = (SRC_MIN_Y - sourceY) / ((SRC_MIN_Y - SRC_MAX_Y) || 1);
+  const thetaDeg = 180 - 2 * (Math.asin(Math.min(frac, 1)) * 180 / Math.PI);
+  const thetaRad = thetaDeg * Math.PI / 180;
+
+  // Scattered photon: deflects upward by theta from +x
+  const photonDir = { x: Math.cos(thetaRad), y: -Math.sin(thetaRad) };
+
+  // Electron recoil: momentum conservation gives tan(φ) = sinθ / (1 − cosθ)
+  const recoilAngle = Math.atan2(Math.sin(thetaRad), 1 - Math.cos(thetaRad));
+  const electronDir = { x: Math.cos(recoilAngle), y: Math.sin(recoilAngle) };
+
+  return { photonDir, electronDir, thetaDeg };
+}
+
+// Animation loop
+function tick(ts) {
+  requestAnimationFrame(tick);
+  const dt = lastTs ? Math.min((ts - lastTs) / 1000, 0.05) : 0;
+  lastTs = ts;
+
+  // Electron drifts after collision
+  if (['recoil', 'pausing_out', 'wave_out'].includes(simState)) {
+    electronPos.x += electronVel.x * dt;
+    electronPos.y += electronVel.y * dt;
+  }
+
+  if (simState === 'traveling' && wavePacket) {
+    wavePacket.x += wavePacket.dirX * wavePacket.speed * dt;
+
+    // Reset if wave exits screen without hitting electron
+    const margin = 160;
+    if (wavePacket.x > W + margin || wavePacket.x < -margin ||
+        wavePacket.y > H + margin || wavePacket.y < -margin) {
+      resetSim();
+      draw();
+      return;
+    }
+
+    // Convert to sphere when leading edge reaches the electron's left surface
+    if (wavePacket.x >= electronPos.x - E_R) {
+      photonSph = {
+        x:  wavePacket.x,
+        y:  wavePacket.y,
+        r:  E_R * 0.18,
+        vx: wavePacket.speed,   // inherit wave velocity — moving rightward
+        vy: 0,
+        bounced: false,
+      };
+      wavePacket = null;
+      simState   = 'entering';
+      setStatus('Photon entering electron…');
+    }
+  }
+
+  // Sphere moves through electron; bounce when it reaches 1.0*E_R from center
+  else if (simState === 'entering' && photonSph) {
+    photonSph.x += photonSph.vx * dt;
+    photonSph.y += photonSph.vy * dt;
+
+    // Reset if sphere exits screen without colliding
+    if (photonSph.x > W + 160 || photonSph.x < -160 ||
+        photonSph.y > H + 160 || photonSph.y < -160) {
+      resetSim();
+      draw();
+      return;
+    }
+
+    const dx   = photonSph.x - electronPos.x;
+    const dy   = photonSph.y - electronPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Collision condition: sphere reaches 1.0*E_R from center, OR reaches CX (random small angle)
+    const atCenter = photonSph.x >= CX;
+    const atEdge   = dist <= E_R * 1.0;
+
+    if (atEdge || atCenter) {
+      // Compute scattered directions now and redirect the sphere
+      const lambda0 = sliderNm();
+      let { photonDir, electronDir, thetaDeg } = computeCollision();
+
+      // If triggered by reaching CX without hitting the E_R boundary, use a random small angle
+      if (atCenter && !atEdge) {
+        thetaDeg = 1 + Math.random() * 19;  // 1°–20°
+        const thetaRad = thetaDeg * Math.PI / 180;
+        photonDir  = { x: Math.cos(thetaRad), y: -Math.sin(thetaRad) };
+        const recoilAngle = Math.atan2(Math.sin(thetaRad), 1 - Math.cos(thetaRad));
+        electronDir = { x: Math.cos(recoilAngle), y: Math.sin(recoilAngle) };
+      }
+
+      scatterAngle    = thetaDeg;
+      scatteredLambda = comptonShift(lambda0, thetaDeg);
+
+      const spd = W * 0.16;
+      photonSph.vx = photonDir.x * spd;
+      photonSph.vy = photonDir.y * spd;
+
+      const recoilSpd = W * 0.0275 * (lambda0 / scatteredLambda);
+      electronVel = { x: electronDir.x * recoilSpd, y: electronDir.y * recoilSpd };
+
+      updateInfo(lambda0, scatteredLambda, thetaDeg);
+      setStatus('Collision! Compton scatter θ = ' + thetaDeg.toFixed(1) + '°');
+      simState = 'recoil';
+    }
+  }
+
+  else if (simState === 'recoil' && photonSph) {
+    photonSph.x += photonSph.vx * dt;
+    photonSph.y += photonSph.vy * dt;
+
+    const dx   = photonSph.x - electronPos.x;
+    const dy   = photonSph.y - electronPos.y;
+    if (Math.sqrt(dx * dx + dy * dy) >= E_R * 1.0) {
+      simState   = 'pausing_out';
+      pauseTimer = 0;
+      setStatus('Scattered photon departing…');
+    }
+  }
+
+  else if (simState === 'pausing_out') {
+    pauseTimer += dt;
+    if (photonSph) {
+      photonSph.x += photonSph.vx * dt;
+      photonSph.y += photonSph.vy * dt;
+    }
+    if (pauseTimer >= 1.0) {
+      const spd = Math.sqrt(photonSph.vx ** 2 + photonSph.vy ** 2) || W * 0.16;
+      wavePacket = {
+        x: photonSph.x,
+        y: photonSph.y,
+        dirX: photonSph.vx / spd,
+        dirY: photonSph.vy / spd,
+        speed: W * 0.16,
+        lambdaPx: scatteredLambda * W * 0.45,
+        lambdaNm: scatteredLambda,
+        numWaves: 6,
+        phase: 0,
+        isScattered: true,
+      };
+      photonSph = null;
+      simState  = 'wave_out';
+      setStatus('Scattered wave packet · λ\' = ' + scatteredLambda.toFixed(4) + ' nm');
+    }
+  }
+
+  else if (simState === 'wave_out' && wavePacket) {
+    wavePacket.x += wavePacket.dirX * wavePacket.speed * dt;
+    wavePacket.y += wavePacket.dirY * wavePacket.speed * dt;
+
+    const margin = 160;
+    if (wavePacket.x > W + margin || wavePacket.x < -margin ||
+        wavePacket.y > H + margin || wavePacket.y < -margin) {
+      resetSim();
+    }
+  }
+
+  draw();
+}
+
+// ── Drawing ────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawElectron();
+  drawTrack();
+  drawSource();
+  if (wavePacket) drawWave(wavePacket);
+  if (photonSph)  drawPhotonSphere(photonSph);
+}
+
+function drawElectron() {
+  const x = electronPos.x, y = electronPos.y, r = E_R;
+
+  // Probability cloud — opacity fades to 0 at edge
+  const cloud = ctx.createRadialGradient(x, y, 0, x, y, r * 1.6);
+  cloud.addColorStop(0,    'rgba(60,130,255,0.72)');
+  cloud.addColorStop(0.25, 'rgba(60,130,255,0.55)');
+  cloud.addColorStop(0.5,  'rgba(60,130,255,0.32)');
+  cloud.addColorStop(0.75, 'rgba(60,130,255,0.14)');
+  cloud.addColorStop(1.0,  'rgba(60,130,255,0.00)');
+  ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+  ctx.fillStyle = cloud; ctx.fill();
+
+  // Bright core
+  const core = ctx.createRadialGradient(x - r*0.18, y - r*0.18, r*0.02, x, y, r*0.55);
+  core.addColorStop(0,   'rgba(200,225,255,0.50)');
+  core.addColorStop(1.0, 'rgba(200,225,255,0.00)');
+  ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, Math.PI * 2);
+  ctx.fillStyle = core; ctx.fill();
+
+  // Label
+  ctx.fillStyle = 'rgba(255,255,255,0.90)';
+  ctx.font = `bold ${Math.round(r * 0.55)}px Arial`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('e\u207B', x, y);
+}
+
+let btnHit = null;
+
+function drawTrack() {
+  const trackX      = SRC_LEFT + SRC_W / 2 - 2.5;
+  const trackTop    = SRC_MAX_Y - 8;
+  const trackBottom = SRC_MIN_Y + SRC_H + 8;
+  ctx.save();
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(trackX, trackTop, 5, trackBottom - trackTop);
+  ctx.restore();
+}
+
+function drawSource() {
+  const x = SRC_LEFT, y = sourceY, w = SRC_W, h = SRC_H;
+
+  // Body
+  const bg = ctx.createLinearGradient(x, y, x+w, y+h);
+  bg.addColorStop(0, '#edf0f8'); bg.addColorStop(1, '#c8d2e8');
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 7);
+  ctx.fillStyle = bg; ctx.fill();
+  ctx.strokeStyle = '#8899cc'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.restore();
+
+  // Label
+  ctx.save();
+  ctx.fillStyle = '#334466';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('X-Ray Source', x + w * 0.44, y + h * 0.28);
+  ctx.restore();
+
+  // Nozzle
+  ctx.save();
+  ctx.fillStyle = '#8899cc';
+  ctx.fillRect(x + w, y + h * 0.38, 8, h * 0.24);
+  ctx.restore();
+
+  // Red button
+  const btnX = x + w * 0.38;
+  const btnY = y + h * 0.68;
+  const btnR = h * 0.20;
+  btnHit = { x: btnX, y: btnY, r: btnR * 1.8 };
+
+  const btnGrd = ctx.createRadialGradient(btnX - btnR*0.2, btnY - btnR*0.25, btnR*0.05, btnX, btnY, btnR);
+  btnGrd.addColorStop(0, '#ff7070');
+  btnGrd.addColorStop(1, '#aa0000');
+  ctx.save();
+  ctx.beginPath(); ctx.arc(btnX, btnY, btnR, 0, Math.PI*2);
+  ctx.fillStyle = btnGrd; ctx.fill();
+  ctx.strokeStyle = '#880000'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.beginPath(); ctx.arc(btnX - btnR*0.2, btnY - btnR*0.28, btnR*0.28, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
+  ctx.restore();
+}
+
+function drawWave(wp) {
+  const totalLen = wp.numWaves * wp.lambdaPx;
+  const perpX    = -wp.dirY, perpY = wp.dirX;
+  const amp      = Math.min(wp.lambdaPx * 0.42, 20);
+  const steps    = Math.ceil(totalLen * 1.6);
+  const color    = wp.isScattered ? '#b07800' : '#1a44cc';
+  const glow     = wp.isScattered ? 'rgba(180,120,0,0.16)' : 'rgba(26,68,204,0.14)';
+
+  function makePath() {
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t     = i / steps;
+      const along = -t * totalLen;
+      const phase = wp.phase + (t * totalLen / wp.lambdaPx) * Math.PI * 2;
+      const env   = Math.sin(Math.PI * t);
+      const px    = wp.x + wp.dirX * along + perpX * Math.sin(phase) * amp * env;
+      const py    = wp.y + wp.dirY * along + perpY * Math.sin(phase) * amp * env;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+  }
+
+  ctx.save();
+  makePath(); ctx.strokeStyle = glow;  ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.stroke();
+  makePath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.restore();
+}
+
+function drawPhotonSphere(ps) {
+  const r = ps.r;
+  const glow = ctx.createRadialGradient(ps.x, ps.y, 0, ps.x, ps.y, r * 3.5);
+  glow.addColorStop(0, 'rgba(255,215,20,0.55)');
+  glow.addColorStop(1, 'rgba(255,170,0,0)');
+  ctx.beginPath(); ctx.arc(ps.x, ps.y, r * 3.5, 0, Math.PI*2);
+  ctx.fillStyle = glow; ctx.fill();
+
+  const sg = ctx.createRadialGradient(ps.x - r*0.3, ps.y - r*0.3, r*0.05, ps.x, ps.y, r);
+  sg.addColorStop(0, '#fff9a0'); sg.addColorStop(0.5, '#f5c000'); sg.addColorStop(1, '#c06800');
+  ctx.beginPath(); ctx.arc(ps.x, ps.y, r, 0, Math.PI*2);
+  ctx.fillStyle = sg; ctx.fill();
+
+  ctx.beginPath(); ctx.arc(ps.x - r*0.25, ps.y - r*0.27, r*0.30, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.50)'; ctx.fill();
+}
+
+// ── Input handling ─────────────────────────────────────────
+function getPos(e) {
+  const rect   = canvas.getBoundingClientRect();
+  const src    = e.touches ? e.touches[0] : e;
+  return {
+    x: (src.clientX - rect.left) * (W / rect.width),
+    y: (src.clientY - rect.top)  * (H / rect.height),
+  };
+}
+
+canvas.addEventListener('mousedown',  onDown);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+
+function onDown(e) {
+  if (e.cancelable) e.preventDefault();
+  const pos = getPos(e);
+
+  // Red button
+  if (btnHit && simState === 'idle') {
+    const dx = pos.x - btnHit.x, dy = pos.y - btnHit.y;
+    if (Math.sqrt(dx*dx + dy*dy) <= btnHit.r) {
+      firePhoton();
+      return;
+    }
+  }
+
+  // Drag source
+  if (pos.x >= SRC_LEFT && pos.x <= SRC_LEFT + SRC_W &&
+      pos.y >= SRC_MAX_Y && pos.y <= SRC_MIN_Y + SRC_H) {
+    dragging = true;
+    dragOffY = pos.y - sourceY;
+  }
+}
+
+canvas.addEventListener('mousemove', onMove);
+canvas.addEventListener('touchmove', onMove, { passive: false });
+
+function onMove(e) {
+  if (e.cancelable) e.preventDefault();
+  if (!dragging) return;
+  const pos = getPos(e);
+  sourceY = Math.max(SRC_MAX_Y, Math.min(SRC_MIN_Y, pos.y - dragOffY));
+}
+
+canvas.addEventListener('mouseup',  () => { dragging = false; });
+canvas.addEventListener('touchend', () => { dragging = false; });
+
+requestAnimationFrame(tick);
+</script>
+
+</body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>
