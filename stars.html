@@ -157,12 +157,12 @@
     </div>
 
     <div class="control-group">
-      <span class="control-label">Core Density <span class="slider-value" id="density-val">5</span></span>
+      <span class="control-label">Core Density</span>
       <input type="range" id="density-slider" min="2" max="40" value="5" step="1">
     </div>
 
     <div class="control-group">
-      <span class="control-label">Core Temperature <span class="slider-value" id="temp-val">1</span></span>
+      <span class="control-label">Core Temperature</span>
       <input type="range" id="temp-slider" min="1" max="10" value="1" step="1">
     </div>
 
@@ -699,10 +699,8 @@ function draw() {
     if (T < 3) convectionMode = 'full';
     else if (T <= 7) convectionMode = 'outer';
     else convectionMode = 'inner';
-  } else if (comp === 'Carbon/Oxygen' && T > 7) {
-    convectionMode = 'inner';
   } else if (comp === 'Carbon/Oxygen') {
-    convectionMode = 'none'; // no convection arrows for C/O at T <= 7
+    convectionMode = 'none'; // no convection arrows for C/O
   } else {
     convectionMode = 'full';
   }
