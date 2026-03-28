@@ -711,7 +711,7 @@ function draw() {
   if (convectionMode === 'full') {
     // CHANGE 3: Trapezoid cells with rounded corners; arrow break on right radial side
     const innerR = Math.max(cR / 2, 8);
-    const outerR = Math.max(aR - 25, innerR + 20);
+    const outerR = Math.max(aR - 15, innerR + 20);
     const Ncells = 6;
     const angW = (Math.PI * 2 / Ncells) * 0.32;
     for (let i = 0; i < Ncells; i++) {
