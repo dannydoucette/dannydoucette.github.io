@@ -700,8 +700,6 @@ function draw() {
     if (T < 3) convectionMode = 'full';
     else if (T <= 7) convectionMode = 'outer';
     else convectionMode = 'inner';
-  } else if (comp === 'Carbon/Oxygen' && T > 7) {
-    convectionMode = 'inner';
   } else if (comp === 'Carbon/Oxygen') {
     convectionMode = 'none'; // no convection arrows for C/O at T <= 7
   } else {
