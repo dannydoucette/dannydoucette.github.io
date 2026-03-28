@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Star Simulation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #fff;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  #app {
+    width: 800px;
+    height: 600px;
+    display: flex;
+    border: 1px solid #ccc;
+    background: #fff;
+    overflow: hidden;
+  }
+  #control-panel {
+    width: 267px;
+    min-width: 267px;
+    height: 600px;
+    background: #f5f5f5;
+    border-right: 1px solid #ccc;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  #control-panel h2 {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .control-group { margin-bottom: 8px; }
+  .control-label {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    margin-bottom: 3px;
+    display: block;
+  }
+  select, input[type=range] {
+    width: 100%;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  .slider-value {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    float: right;
+  }
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  button {
+    flex: 1;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    padding: 5px 0;
+    cursor: pointer;
+    border: 1px solid #888;
+    background: #e8e8e8;
+    border-radius: 3px;
+  }
+  button:hover:not(:disabled) { background: #d0d0d0; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #lifetime-group { margin-top: 8px; }
+  #lifetime-label {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    margin-bottom: 3px;
+    display: block;
+  }
+  #lifetime-bar-bg {
+    width: 100%;
+    height: 14px;
+    background: #ccc;
+    border-radius: 7px;
+    overflow: hidden;
+    margin-top: 3px;
+  }
+  #lifetime-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: #4a90d9;
+    transition: width 0.1s linear;
+    border-radius: 7px;
+  }
+  #white-dwarf-text {
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+    display: none;
+  }
+  /* HR diagram — anchored just above attribution via margin-top:auto on #hr-container */
+  #hr-spacer { flex: 1; }
+  #hr-container { margin-bottom: 4px; }
+  #hr-label {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 3px;
+  }
+  #hr-canvas {
+    display: block;
+    background: #0f172a;
+    border: 1px solid #aaa;
+  }
+  #attribution {
+    text-align: center;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #555;
+    padding-top: 6px;
+    border-top: 1px solid #ccc;
+  }
+  #display-panel {
+    flex: 1;
+    height: 600px;
+    position: relative;
+    background: #fff;
+    overflow: hidden;
+  }
+  #main-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 533px;
+    height: 600px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="control-panel">
+    <h2>Star Simulation</h2>
+
+    <div class="control-group">
+      <span class="control-label">Core Composition</span>
+      <select id="composition-select" style="font-size:14px;font-family:Arial,sans-serif;">
+        <option value="Hydrogen">Hydrogen</option>
+        <option value="Helium">Helium</option>
+        <option value="Carbon/Oxygen">Carbon/Oxygen</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">Core Density <span class="slider-value" id="density-val">5</span></span>
+      <input type="range" id="density-slider" min="2" max="40" value="5" step="1">
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">Core Temperature <span class="slider-value" id="temp-val">1</span></span>
+      <input type="range" id="temp-slider" min="1" max="10" value="1" step="1">
+    </div>
+
+    <div class="btn-row">
+      <button id="evolve-btn" disabled>Evolve</button>
+      <button id="pause-btn">Pause</button>
+      <button id="reset-btn">Reset</button>
+    </div>
+
+    <div id="lifetime-group" style="display:none;">
+      <span id="lifetime-label">Lifetime</span>
+      <div id="lifetime-bar-bg"><div id="lifetime-bar-fill"></div></div>
+      <div id="white-dwarf-text">White dwarfs will slowly cool until the end of the universe.</div>
+    </div>
+
+    <!-- Spacer pushes HR diagram to bottom, just above attribution -->
+    <div id="hr-spacer"></div>
+
+    <div id="hr-container">
+      <div id="hr-label">H-R Diagram</div>
+      <canvas id="hr-canvas" width="239" height="175"></canvas>
+    </div>
+
+    <div id="attribution">
+      Danny Doucette<br>thinkib.net/physics
+    </div>
+  </div>
+
+  <div id="display-panel">
+    <canvas id="main-canvas" width="533" height="600"></canvas>
+  </div>
+</div>
+
+<script>
+// ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
+const W = 533, H = 600;
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+
+const hrCanvas = document.getElementById('hr-canvas');
+const hrCtx = hrCanvas.getContext('2d');
+const HR_W = 239, HR_H = 175;
+
+// ─── DOM REFS ────────────────────────────────────────────────────────────────
+const compSelect      = document.getElementById('composition-select');
+const densitySlider   = document.getElementById('density-slider');
+const tempSlider      = document.getElementById('temp-slider');
+const densityVal      = document.getElementById('density-val');
+const tempVal         = document.getElementById('temp-val');
+const evolveBtn       = document.getElementById('evolve-btn');
+const pauseBtn        = document.getElementById('pause-btn');
+const resetBtn        = document.getElementById('reset-btn');
+const lifetimeGroup   = document.getElementById('lifetime-group');
+const lifetimeBarFill = document.getElementById('lifetime-bar-fill');
+const whiteDwarfText  = document.getElementById('white-dwarf-text');
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let state = {
+  composition: 'Hydrogen',
+  NCore: 5,
+  TempCore: 1,
+  coreRadius: 40,
+  atmRadius: 100,
+  paused: false,
+  evolving: false,
+  evolveProgress: 0,
+  evolveDuration: 60,
+  evolveStartTime: null,
+  _pausedElapsed: 0,
+  frozen: false,
+  collisionCount: 0,
+};
+
+let nuclei = [];          // { x, y, vx, vy, r, color }
+let fusionParticles = []; // { x, y, vx, vy, r, color, bounces }
+
+const ZOOM_BOX = { x: 10, y: 10, w: 300, h: 200 };
+const CORE_BOX_HALF_W = 15, CORE_BOX_HALF_H = 10;
+
+// ─── GEOMETRY HELPERS ────────────────────────────────────────────────────────
+function getCoreCenter() { return { x: W / 2, y: H * 2 / 3 }; }
+
+// CHANGE 5: atmosphere radius and red arrow thickness driven by TempCore * NCore
+// Map TempCore*NCore range: min=1*2=2, max=10*40=400
+// Atmosphere radius for Hydrogen: scale 70–170 by TempCore*NCore (normalised 2..400)
+function getAtmRadiusTarget() {
+  const c = state.composition;
+  if (c === 'Hydrogen') {
+    const tn = state.TempCore * state.NCore;
+    const norm = Math.min(Math.max((tn - 2) / (400 - 2), 0), 1);
+    return 70 + norm * 100; // 70–170
+  }
+  if (c === 'Helium') return 250;
+  return 400; // visual cap representing 1200px concept
+}
+
+function getCoreRadiusTarget() {
+  if (state.composition === 'Hydrogen') return 40;
+  if (state.composition === 'Helium')   return 25;
+  return 10;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// ─── NUCLEI HELPERS ──────────────────────────────────────────────────────────
+function getNucleusColor() {
+  const c = state.composition;
+  if (c === 'Hydrogen') return '#e53935';
+  if (c === 'Helium')   return '#ff9800';
+  return '#ffffff';
+}
+
+function getFusedColor() {
+  return state.composition === 'Hydrogen' ? '#ff9800' : '#ffffff';
+}
+
+function initNuclei() {
+  nuclei = []; fusionParticles = [];
+  state.collisionCount = 0;
+  const { x: bx, y: by, w: bw, h: bh } = ZOOM_BOX;
+  const margin = 8, spd = state.TempCore * 0.5;
+  for (let i = 0; i < state.NCore; i++) {
+    const a = Math.random() * Math.PI * 2;
+    nuclei.push({
+      x: bx + margin + Math.random() * (bw - 2 * margin),
+      y: by + margin + Math.random() * (bh - 2 * margin),
+      vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+      r: 5, color: getNucleusColor()
+    });
+  }
+}
+
+function spawnFromWall(color) {
+  const { x: bx, y: by, w: bw, h: bh } = ZOOM_BOX;
+  const spd = state.TempCore * 0.5;
+  const wall = Math.floor(Math.random() * 4);
+  let x, y, vx, vy;
+  const a = Math.random() * 0.8 + 0.1;
+  if (wall === 0) {
+    x = bx + Math.random() * bw; y = by + 5;
+    vx = Math.cos(a) * spd; vy = Math.abs(Math.sin(a)) * spd;
+  } else if (wall === 1) {
+    x = bx + Math.random() * bw; y = by + bh - 5;
+    vx = Math.cos(a) * spd; vy = -Math.abs(Math.sin(a)) * spd;
+  } else if (wall === 2) {
+    x = bx + 5; y = by + Math.random() * bh;
+    vx = Math.abs(Math.cos(a)) * spd; vy = Math.sin(a) * spd;
+  } else {
+    x = bx + bw - 5; y = by + Math.random() * bh;
+    vx = -Math.abs(Math.cos(a)) * spd; vy = Math.sin(a) * spd;
+  }
+  nuclei.push({ x, y, vx, vy, r: 5, color });
+}
+
+function reinitNuclei() {
+  const c = getNucleusColor();
+  const targetSpd = state.TempCore * 0.5;
+  for (let p of nuclei) {
+    p.color = c;
+    const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+    if (spd > 0) { const s = targetSpd / spd; p.vx *= s; p.vy *= s; }
+    else { const a = Math.random() * Math.PI * 2; p.vx = Math.cos(a) * targetSpd; p.vy = Math.sin(a) * targetSpd; }
+  }
+  const { x: bx, y: by, w: bw, h: bh } = ZOOM_BOX;
+  const margin = 8;
+  while (nuclei.length < state.NCore) {
+    const a = Math.random() * Math.PI * 2;
+    nuclei.push({
+      x: bx + margin + Math.random() * (bw - 2 * margin),
+      y: by + margin + Math.random() * (bh - 2 * margin),
+      vx: Math.cos(a) * targetSpd, vy: Math.sin(a) * targetSpd,
+      r: 5, color: c
+    });
+  }
+  while (nuclei.length > state.NCore) nuclei.pop();
+}
+
+// ─── PHYSICS UPDATE ──────────────────────────────────────────────────────────
+function updateNuclei(dt) {
+  if (state.paused) return;
+  const { x: bx, y: by, w: bw, h: bh } = ZOOM_BOX;
+
+  for (let p of nuclei) {
+    p.x += p.vx * dt * 60; p.y += p.vy * dt * 60;
+    if (p.x - p.r < bx)      { p.x = bx + p.r;      p.vx =  Math.abs(p.vx); }
+    if (p.x + p.r > bx + bw) { p.x = bx + bw - p.r; p.vx = -Math.abs(p.vx); }
+    if (p.y - p.r < by)      { p.y = by + p.r;       p.vy =  Math.abs(p.vy); }
+    if (p.y + p.r > by + bh) { p.y = by + bh - p.r;  p.vy = -Math.abs(p.vy); }
+  }
+
+  const ignition = isIgnition();
+  outer:
+  for (let i = 0; i < nuclei.length; i++) {
+    for (let j = i + 1; j < nuclei.length; j++) {
+      const a = nuclei[i], b = nuclei[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minD = a.r + b.r;
+      if (dist < minD && dist > 0) {
+        const nx = dx / dist, ny = dy / dist;
+        const ov = minD - dist;
+        a.x -= nx * ov / 2; a.y -= ny * ov / 2;
+        b.x += nx * ov / 2; b.y += ny * ov / 2;
+        const dvx = a.vx - b.vx, dvy = a.vy - b.vy;
+        const dot = dvx * nx + dvy * ny;
+        if (dot > 0) {
+          a.vx -= dot * nx; a.vy -= dot * ny;
+          b.vx += dot * nx; b.vy += dot * ny;
+        }
+        state.collisionCount++;
+        if (ignition && state.composition !== 'Carbon/Oxygen' && state.collisionCount % 5 === 0) {
+          doFusion(i, j);
+          break outer;
+        }
+      }
+    }
+  }
+
+  // Update fusion particles — remove after 3rd bounce, spawn 2 new nuclei
+  const toSpawn = [];
+  fusionParticles = fusionParticles.filter(p => {
+    p.x += p.vx * dt * 60; p.y += p.vy * dt * 60;
+    let hit = false;
+    if (p.x - p.r < bx)      { p.x = bx + p.r;      p.vx =  Math.abs(p.vx); hit = true; }
+    if (p.x + p.r > bx + bw) { p.x = bx + bw - p.r; p.vx = -Math.abs(p.vx); hit = true; }
+    if (p.y - p.r < by)      { p.y = by + p.r;       p.vy =  Math.abs(p.vy); hit = true; }
+    if (p.y + p.r > by + bh) { p.y = by + bh - p.r;  p.vy = -Math.abs(p.vy); hit = true; }
+    if (hit) {
+      p.bounces++;
+      if (p.bounces > 3) {
+        toSpawn.push(getNucleusColor(), getNucleusColor());
+        return false;
+      }
+    }
+    return true;
+  });
+  for (const c of toSpawn) spawnFromWall(c);
+}
+
+function doFusion(i, j) {
+  const a = nuclei[i], b = nuclei[j];
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const mvx = (a.vx + b.vx) / 2, mvy = (a.vy + b.vy) / 2;
+  fusionParticles.push({ x: mx, y: my, vx: mvx, vy: mvy, r: 9, color: getFusedColor(), bounces: 0 });
+  nuclei.splice(j, 1);
+  nuclei.splice(i, 1);
+}
+
+// ─── IGNITION ────────────────────────────────────────────────────────────────
+function isIgnition() {
+  const c = state.composition, T = state.TempCore, N = state.NCore;
+  if (c === 'Hydrogen') {
+    // Red Dwarf ignites at T > 1; other main sequence types still need T > 4
+    if (T < 6 && T > 1) return N > 10; // Red Dwarf: T > 1
+    return N > 10 && T > 4;            // other Hydrogen: T > 4
+  }
+  if (c === 'Helium') return N > 30 && (T === 6 || T === 7);
+  return false;
+}
+
+function getIgnitionLabel() {
+  const c = state.composition, T = state.TempCore;
+  if (c === 'Hydrogen') {
+    if (T > 7) return 'Main Sequence Star (Blue-White Supergiant)';
+    if (T < 6) return 'Main Sequence Star (Red Dwarf)';
+    return 'Main Sequence Star';
+  }
+  if (c === 'Helium') return 'Red Giant';
+  return 'White Dwarf + Planetary Nebula';
+}
+
+// ─── DRAWING HELPERS ─────────────────────────────────────────────────────────
+
+// Wavy line + 10px straight extension + arrowhead on extension
+function drawWavyArrow(c, cx, cy, angle, wavyLen, color, thickness, waveAmp, waveFreq) {
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = thickness;
+  c.lineCap = 'round';
+
+  const steps = 30;
+  c.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const dist = t * wavyLen;
+    const wave = Math.sin(t * Math.PI * waveFreq) * waveAmp;
+    const x = cx + Math.cos(angle) * dist - Math.sin(angle) * wave;
+    const y = cy + Math.sin(angle) * dist + Math.cos(angle) * wave;
+    if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+  }
+  c.stroke();
+
+  // End of wavy part
+  const endWave = Math.sin(Math.PI * waveFreq) * waveAmp;
+  const waveEndX = cx + Math.cos(angle) * wavyLen - Math.sin(angle) * endWave;
+  const waveEndY = cy + Math.sin(angle) * wavyLen + Math.cos(angle) * endWave;
+
+  // Straight 10px extension along arrow direction
+  const SL = 10;
+  const tipX = waveEndX + Math.cos(angle) * SL;
+  const tipY = waveEndY + Math.sin(angle) * SL;
+  c.beginPath();
+  c.moveTo(waveEndX, waveEndY);
+  c.lineTo(tipX, tipY);
+  c.stroke();
+
+  // Arrowhead on the straight tip
+  const HL = 8, HA = 0.4;
+  c.beginPath();
+  c.moveTo(tipX, tipY);
+  c.lineTo(tipX - HL * Math.cos(angle - HA), tipY - HL * Math.sin(angle - HA));
+  c.moveTo(tipX, tipY);
+  c.lineTo(tipX - HL * Math.cos(angle + HA), tipY - HL * Math.sin(angle + HA));
+  c.stroke();
+  c.restore();
+}
+
+// Circular arc + 10px straight tangent extension + arrowhead
+function drawCircularArrow(c, cx, cy, r, startAngle, sweep, color, lineWidth) {
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = lineWidth;
+
+  c.beginPath();
+  c.arc(cx, cy, r, startAngle, startAngle + sweep, false);
+  c.stroke();
+
+  const endAngle = startAngle + sweep;
+  const arcEndX = cx + r * Math.cos(endAngle);
+  const arcEndY = cy + r * Math.sin(endAngle);
+  const tangDir = endAngle + Math.PI / 2;
+
+  const SL = 10;
+  const tipX = arcEndX + Math.cos(tangDir) * SL;
+  const tipY = arcEndY + Math.sin(tangDir) * SL;
+  c.beginPath();
+  c.moveTo(arcEndX, arcEndY);
+  c.lineTo(tipX, tipY);
+  c.stroke();
+
+  const HL = 7, HA = 0.4;
+  c.beginPath();
+  c.moveTo(tipX, tipY);
+  c.lineTo(tipX - HL * Math.cos(tangDir - HA), tipY - HL * Math.sin(tangDir - HA));
+  c.moveTo(tipX, tipY);
+  c.lineTo(tipX - HL * Math.cos(tangDir + HA), tipY - HL * Math.sin(tangDir + HA));
+  c.stroke();
+  c.restore();
+}
+
+// CHANGE 3: Trapezoid convection cell with TRUE rounded corners using arc(),
+// and a 20px break + arrowhead on one radial side instead of outward arrow.
+//
+// The trapezoid has 4 corners:
+//   IL (inner-left), IR (inner-right), OR (outer-right), OL (outer-left)
+// Radial sides: IL→OL (left) and IR→OR (right)
+// Parallel sides: IL→IR (inner arc), OL→OR (outer arc)
+//
+// We round every corner with a small arc of radius `cr`.
+// For each corner we need: the two edge directions meeting at that corner,
+// then we back off by cr along each edge and place an arc.
+function drawTrapezoidConvection(c, ccx, ccy, innerR, outerR, centerAngle, angW, color, lineWidth) {
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = lineWidth;
+  c.lineCap = 'round';
+
+  const il = centerAngle - angW;
+  const ir = centerAngle + angW;
+
+  // The four corner points (exact, un-rounded)
+  const ilx = ccx + innerR * Math.cos(il), ily = ccy + innerR * Math.sin(il);
+  const irx = ccx + innerR * Math.cos(ir), iry = ccy + innerR * Math.sin(ir);
+  const olx = ccx + outerR * Math.cos(il), oly = ccy + outerR * Math.sin(il);
+  const orx = ccx + outerR * Math.cos(ir), ory = ccy + outerR * Math.sin(ir);
+
+  // Corner rounding radius
+  const cr = 6;
+
+  // Helper: unit vector from point A toward point B
+  function uv(ax, ay, bx, by) {
+    const d = Math.sqrt((bx-ax)**2 + (by-ay)**2);
+    return [(bx-ax)/d, (by-ay)/d];
+  }
+
+  // Helper: draw one rounded corner.
+  // Walks along edge1 to within cr of corner, arcs to within cr along edge2.
+  // corner = [cx,cy], dir1 = unit vec from prev point toward corner,
+  //                    dir2 = unit vec from corner toward next point.
+  function roundedCorner(cornerX, cornerY, d1x, d1y, d2x, d2y) {
+    // Entry point: corner minus cr along d1
+    const ex = cornerX - d1x * cr, ey = cornerY - d1y * cr;
+    // Exit point: corner plus cr along d2
+    const xx = cornerX + d2x * cr, xy = cornerY + d2y * cr;
+    c.lineTo(ex, ey);
+    c.arcTo(cornerX, cornerY, xx, xy, cr);
+    // arcTo moves current point to exit, so we continue from there
+  }
+
+  // Walk around: IL → OL → OR → IR → IL
+  // Directions at each corner:
+  const [d_il_ol_x, d_il_ol_y] = uv(ilx,ily,olx,oly); // IL→OL (left radial)
+  const [d_ol_or_x, d_ol_or_y] = uv(olx,oly,orx,ory); // OL→OR (outer tangential)
+  const [d_or_ir_x, d_or_ir_y] = uv(orx,ory,irx,iry); // OR→IR (right radial, inward)
+  const [d_ir_il_x, d_ir_il_y] = uv(irx,iry,ilx,ily); // IR→IL (inner tangential)
+
+  c.beginPath();
+  // Start at entry of IL corner (coming from IR→IL direction)
+  // i.e. entry of IL = IL + d_ir_il * cr
+  const startX = ilx + d_ir_il_x * cr, startY = ily + d_ir_il_y * cr;
+  // But arcTo needs us to lineTo an entry first, so start from exit of IL:
+  // exit of IL = IL + d_il_ol * cr
+  c.moveTo(ilx + d_il_ol_x * cr, ily + d_il_ol_y * cr);
+
+  // IL→OL segment (left radial side) → round OL corner
+  roundedCorner(olx, oly, d_il_ol_x, d_il_ol_y, d_ol_or_x, d_ol_or_y);
+
+  // OL→OR segment (outer tangential) → round OR corner
+  roundedCorner(orx, ory, d_ol_or_x, d_ol_or_y, d_or_ir_x, d_or_ir_y);
+
+  // OR→IR segment (right radial side, with 20px break for arrowhead) → round IR corner
+  // We'll draw the right radial side in two parts with a gap, and put an arrowhead in the gap.
+  // The full right radial runs from (orx,ory) to (irx,iry).
+  // After OR corner exit we're at: orx + d_or_ir_x*cr, ory + d_or_ir_y*cr
+  // Midpoint of OR→IR for the break:
+  const rmidX = (orx + irx) / 2, rmidY = (ory + iry) / 2;
+  const breakLen = 10; // half-width of break
+  // Break start and end along the OR→IR direction
+  const brkStartX = rmidX - d_or_ir_x * breakLen;
+  const brkStartY = rmidY - d_or_ir_y * breakLen;
+  const brkEndX   = rmidX + d_or_ir_x * breakLen;
+  const brkEndY   = rmidY + d_or_ir_y * breakLen;
+
+  // Draw first part of right radial: exit of OR corner → break start
+  c.lineTo(brkStartX, brkStartY);
+  c.stroke();
+
+  // Draw arrowhead at break midpoint pointing OUTWARD (from inner toward outer = d_il_ol direction)
+  c.beginPath();
+  const HA = 0.45, HL = 8;
+  // outward direction is the reverse of d_or_ir
+  const outDirX = -d_or_ir_x, outDirY = -d_or_ir_y;
+  const tipX = brkStartX + outDirX * 2, tipY = brkStartY + outDirY * 2;
+  const aDir = Math.atan2(outDirY, outDirX);
+  c.moveTo(tipX, tipY);
+  c.lineTo(tipX - HL * Math.cos(aDir - HA), tipY - HL * Math.sin(aDir - HA));
+  c.moveTo(tipX, tipY);
+  c.lineTo(tipX - HL * Math.cos(aDir + HA), tipY - HL * Math.sin(aDir + HA));
+  c.stroke();
+
+  // Continue right radial: break end → entry of IR corner, then round IR corner
+  c.beginPath();
+  c.moveTo(brkEndX, brkEndY);
+  roundedCorner(irx, iry, d_or_ir_x, d_or_ir_y, d_ir_il_x, d_ir_il_y);
+
+  // IR→IL segment (inner tangential) → round IL corner back to start
+  roundedCorner(ilx, ily, d_ir_il_x, d_ir_il_y, d_il_ol_x, d_il_ol_y);
+
+  // Close back to where we started
+  c.lineTo(ilx + d_il_ol_x * cr, ily + d_il_ol_y * cr);
+  c.stroke();
+
+  c.restore();
+}
+
+// ─── MAIN DRAW ────────────────────────────────────────────────────────────────
+let time = 0;
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const cc = getCoreCenter();
+  const cR = state.coreRadius;
+  const aR = state.atmRadius;
+  const T  = state.TempCore;
+  const N  = state.NCore;
+  const comp = state.composition;
+
+  // ── Atmosphere circle — CHANGE 1: no transparency (solid fill) ──
+  ctx.beginPath();
+  ctx.arc(cc.x, cc.y, aR, 0, Math.PI * 2);
+  // A very pale yellow, fully opaque
+  ctx.fillStyle = '#fffde7';
+  ctx.fill();
+  ctx.strokeStyle = '#ffd600';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Atmosphere label
+  const atmAngle = -Math.PI / 4;
+  const almX = Math.min(Math.max(cc.x + Math.cos(atmAngle) * aR + 5, 5), W - 80);
+  const almY = Math.min(Math.max(cc.y + Math.sin(atmAngle) * aR - 5, 14), H - 5);
+  ctx.fillStyle = '#c8a000'; ctx.font = '14px Arial';
+  ctx.fillText('Atmosphere', almX, almY);
+
+  // ── Core circle — CHANGE 1: no transparency, same fill used for zoom box ──
+  // Solid red fill (same hue as the zoom box background)
+  const CORE_FILL = '#e57373'; // light red, opaque
+  ctx.beginPath();
+  ctx.arc(cc.x, cc.y, cR, 0, Math.PI * 2);
+  ctx.fillStyle = CORE_FILL;
+  ctx.fill();
+  ctx.strokeStyle = '#e53935'; ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const crAngle = -Math.PI / 4;
+  const crX = cc.x + Math.cos(crAngle) * cR + 5;
+  const crY = cc.y + Math.sin(crAngle) * cR - 5;
+  ctx.fillStyle = '#e53935'; ctx.font = '14px Arial';
+  ctx.fillText('Core', crX, crY);
+
+  // ── Wavy arrows from Core ──
+  // CHANGE 5: thickness proportional to TempCore * NCore (normalised)
+  const tn = T * N;
+  const tnNorm = Math.min(Math.max((tn - 2) / (400 - 2), 0), 1);
+  const arrowThickness = 1 + tnNorm * 5; // range ~1–6
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const sx = cc.x + Math.cos(angle) * cR;
+    const sy = cc.y + Math.sin(angle) * cR;
+    drawWavyArrow(ctx, sx, sy, angle, 35, '#e53935', arrowThickness, 4, 2.5);
+  }
+
+  // ── Wavy arrows from Atmosphere (10, fixed angles) ──
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const sx = cc.x + Math.cos(angle) * aR;
+    const sy = cc.y + Math.sin(angle) * aR;
+    drawWavyArrow(ctx, sx, sy, angle, 28, '#ffd600', 1, 3, 2.5);
+  }
+
+  // ── Convection ──
+  let convectionMode;
+  if (comp === 'Hydrogen') {
+    if (T < 3) convectionMode = 'full';
+    else if (T <= 7) convectionMode = 'outer';
+    else convectionMode = 'inner';
+  } else if (comp === 'Carbon/Oxygen' && T > 7) {
+    convectionMode = 'inner';
+  } else if (comp === 'Carbon/Oxygen') {
+    convectionMode = 'none'; // no convection arrows for C/O at T <= 7
+  } else {
+    convectionMode = 'full';
+  }
+
+  let convLX = cc.x + 40, convLY = cc.y + 40;
+
+  if (convectionMode === 'full') {
+    // CHANGE 3: Trapezoid cells with rounded corners; arrow break on right radial side
+    const innerR = Math.max(cR / 2, 8);
+    const outerR = Math.max(aR - 25, innerR + 20);
+    const Ncells = 6;
+    const angW = (Math.PI * 2 / Ncells) * 0.32;
+    for (let i = 0; i < Ncells; i++) {
+      const angle = (i / Ncells) * Math.PI * 2;
+      drawTrapezoidConvection(ctx, cc.x, cc.y, innerR, outerR, angle, angW, '#111', 1.5);
+    }
+    convLX = cc.x + outerR * 0.58 + 5;
+    convLY = cc.y + outerR * 0.58 + 14;
+
+  } else if (convectionMode === 'outer') {
+    // 10 circular arrows, 20px further inward (fully inside atmosphere)
+    const ringR = (cR + aR) * 0.70 - 20;
+    const arcR  = Math.max(Math.min((aR - cR) * 0.14, ringR * 0.22), 10);
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const cx2 = cc.x + Math.cos(angle) * ringR;
+      const cy2 = cc.y + Math.sin(angle) * ringR;
+      drawCircularArrow(ctx, cx2, cy2, arcR, angle, Math.PI * 1.5, '#111', 1.2);
+    }
+    convLX = cc.x + ringR * 0.62 + 5;
+    convLY = cc.y + ringR * 0.62 + 14;
+
+  } else { // inner, T > 7: 4 circular arrows inside Core, 3px extra spacing
+    const orbR = cR * 0.45 + 3;
+    const arcR = Math.max(cR * 0.26, 6);
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const cx2 = cc.x + Math.cos(angle) * orbR;
+      const cy2 = cc.y + Math.sin(angle) * orbR;
+      drawCircularArrow(ctx, cx2, cy2, arcR, angle, Math.PI * 1.5, '#111', 1.2);
+    }
+    convLX = cc.x + orbR * 0.65 + 5;
+    convLY = cc.y + orbR * 0.65 + 14;
+  }
+
+  if (convectionMode !== 'none') {
+    ctx.fillStyle = '#111'; ctx.font = '14px Arial';
+    ctx.fillText('Convection',
+      Math.min(Math.max(convLX, 5), W - 85),
+      Math.min(Math.max(convLY, 14), H - 5));
+  }
+
+  // ── Zoom box ──
+  const zb = ZOOM_BOX;
+  const coreBx  = cc.x - CORE_BOX_HALF_W, coreBy  = cc.y - CORE_BOX_HALF_H;
+  const coreBrx = cc.x + CORE_BOX_HALF_W, coreBry = cc.y + CORE_BOX_HALF_H;
+
+  // Connecting dashed lines
+  ctx.save();
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(coreBx,  coreBy);  ctx.lineTo(zb.x,        zb.y);
+  ctx.moveTo(coreBrx, coreBy);  ctx.lineTo(zb.x + zb.w, zb.y);
+  ctx.moveTo(coreBx,  coreBry); ctx.lineTo(zb.x,        zb.y + zb.h);
+  ctx.moveTo(coreBrx, coreBry); ctx.lineTo(zb.x + zb.w, zb.y + zb.h);
+  ctx.stroke();
+  ctx.restore();
+
+  // Mini core box
+  ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 1;
+  ctx.strokeRect(coreBx, coreBy, CORE_BOX_HALF_W * 2, CORE_BOX_HALF_H * 2);
+
+  // CHANGE 1: zoom box background = same solid light red as core fill (#e57373)
+  ctx.fillStyle = CORE_FILL;
+  ctx.fillRect(zb.x, zb.y, zb.w, zb.h);
+  ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 2;
+  ctx.strokeRect(zb.x, zb.y, zb.w, zb.h);
+
+  // Clip & draw particles
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(zb.x, zb.y, zb.w, zb.h);
+  ctx.clip();
+
+  function drawParticle(p) {
+    const grad = ctx.createRadialGradient(p.x - 1, p.y - 1, 1, p.x, p.y, p.r);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(1, p.color);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+    if (spd > 0.01) {
+      const ux = p.vx / spd, uy = p.vy / spd;
+      const arrowLen = 25;
+      const ex = p.x + ux * arrowLen, ey = p.y + uy * arrowLen;
+      ctx.beginPath();
+      ctx.strokeStyle = '#00c853'; ctx.lineWidth = 1.5;
+      ctx.moveTo(p.x, p.y); ctx.lineTo(ex, ey);
+      ctx.stroke();
+      const ang = Math.atan2(p.vy, p.vx);
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - 6 * Math.cos(ang - 0.4), ey - 6 * Math.sin(ang - 0.4));
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - 6 * Math.cos(ang + 0.4), ey - 6 * Math.sin(ang + 0.4));
+      ctx.stroke();
+    }
+  }
+
+  for (const p of nuclei)          drawParticle(p);
+  for (const p of fusionParticles)  drawParticle(p);
+  ctx.restore();
+
+  // ── Ignition label ──
+  if (isIgnition()) {
+    ctx.fillStyle = '#1565c0';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText('Ignition: ' + getIgnitionLabel(), 8, H - 10);
+  }
+}
+
+// ─── HR DIAGRAM ──────────────────────────────────────────────────────────────
+// CHANGE 2: all text 14px Arial; White Dwarf label above oval; oval shifted down 10px
+
+const HR_PAD = { left: 30, right: 8, top: 20, bottom: 36 };
+const HR_PW  = HR_W - HR_PAD.left - HR_PAD.right;
+const HR_PH  = HR_H - HR_PAD.top  - HR_PAD.bottom;
+
+// TempCore → x pixel (hot=left, cool=right)
+function hrTempX(tc) {
+  return HR_PAD.left + (1 - (tc - 1) / 9) * HR_PW;
+}
+
+// Luminosity (log scale) → y pixel
+function hrLumY(lum) {
+  const logMin = -3, logMax = 4;
+  const frac = (Math.log10(Math.max(lum, 1e-4)) - logMin) / (logMax - logMin);
+  return HR_PAD.top + HR_PH * (1 - frac);
+}
+
+// Main sequence luminosity: L ~ (T/5)^4, solar-normalised
+function msLum(tc) { return Math.pow(tc / 5, 4); }
+
+function drawHR() {
+  const hc = hrCtx;
+  hc.clearRect(0, 0, HR_W, HR_H);
+
+  // Dark background
+  hc.fillStyle = '#0f172a';
+  hc.fillRect(0, 0, HR_W, HR_H);
+
+  // ── Main sequence band ──
+  const msPoints = [];
+  for (let tc = 1; tc <= 10; tc += 0.5)
+    msPoints.push({ x: hrTempX(tc), y: hrLumY(msLum(tc)) });
+
+  const bw = 5;
+  hc.beginPath();
+  msPoints.forEach((p, i) => i === 0 ? hc.moveTo(p.x, p.y - bw) : hc.lineTo(p.x, p.y - bw));
+  for (let i = msPoints.length - 1; i >= 0; i--)
+    hc.lineTo(msPoints[i].x, msPoints[i].y + bw);
+  hc.closePath();
+  hc.fillStyle = 'rgba(100,180,255,0.22)'; hc.fill();
+
+  hc.beginPath();
+  msPoints.forEach((p, i) => i === 0 ? hc.moveTo(p.x, p.y) : hc.lineTo(p.x, p.y));
+  hc.strokeStyle = 'rgba(150,210,255,0.55)'; hc.lineWidth = 1.5; hc.stroke();
+
+  // ── Red giant region ──
+  const rgX = HR_PAD.left + HR_PW * 0.80, rgY = HR_PAD.top + HR_PH * 0.18;
+  hc.beginPath();
+  hc.ellipse(rgX, rgY, 26, 16, 0, 0, Math.PI * 2);
+  hc.fillStyle = 'rgba(255,100,50,0.18)'; hc.fill();
+  hc.strokeStyle = 'rgba(255,100,50,0.45)'; hc.lineWidth = 1; hc.stroke();
+  hc.fillStyle = 'rgba(255,140,90,0.9)';
+  hc.font = '14px Arial'; hc.textAlign = 'center';
+  hc.fillText('Red Giant', rgX, rgY - 20);
+
+  // ── White dwarf region — oval shifted down 10px, label ABOVE oval ──
+  // CHANGE 2: oval 10px lower than before; label above it
+  const wdX = HR_PAD.left + HR_PW * 0.14;
+  const wdY = HR_PAD.top + HR_PH * 0.80 + 10; // +10px down
+  hc.beginPath();
+  hc.ellipse(wdX, wdY, 18, 11, 0, 0, Math.PI * 2);
+  hc.fillStyle = 'rgba(200,220,255,0.15)'; hc.fill();
+  hc.strokeStyle = 'rgba(200,220,255,0.38)'; hc.lineWidth = 1; hc.stroke();
+  hc.fillStyle = 'rgba(210,225,255,0.9)';
+  hc.font = '14px Arial'; hc.textAlign = 'center';
+  // Label above the oval (oval top - 4px margin)
+  hc.fillText('White Dwarf', wdX, wdY - 11 - 4);
+
+  // ── Axes ──
+  hc.strokeStyle = '#666'; hc.lineWidth = 1;
+  hc.beginPath();
+  hc.moveTo(HR_PAD.left, HR_PAD.top);
+  hc.lineTo(HR_PAD.left, HR_PAD.top + HR_PH);
+  hc.lineTo(HR_PAD.left + HR_PW, HR_PAD.top + HR_PH);
+  hc.stroke();
+
+  // X-axis: simple "← Temperature" label just below the axis
+  const axY = HR_PAD.top + HR_PH + 14;
+  hc.fillStyle = '#aaa'; hc.font = '14px Arial'; hc.textAlign = 'left';
+  hc.fillText('← Temperature', HR_PAD.left, axY);
+
+  // Y-axis Luminosity label — rotated, positioned in upper quarter to avoid White Dwarf label
+  hc.save();
+  hc.translate(HR_PAD.left - 2, HR_PAD.top + HR_PH * 0.22);
+  hc.rotate(-Math.PI / 2);
+  hc.textAlign = 'center';
+  hc.fillStyle = '#aaa'; hc.font = '14px Arial';
+  hc.fillText('Luminosity', 0, 0);
+  hc.restore();
+  hc.textAlign = 'left';
+
+  // Blue "Main Sequence" label along the band
+  hc.fillStyle = '#5599ff';
+  hc.font = '14px Arial'; hc.textAlign = 'center';
+  // Place it at the midpoint of the main sequence band (tc ~ 5.5)
+  const msLabelX = hrTempX(5.5);
+  const msLabelY = hrLumY(msLum(5.5)) - 12;
+  hc.fillText('Main Sequence', msLabelX, msLabelY);
+
+  // ── Current star position ──
+  const comp = state.composition, tc = state.TempCore;
+  let sx, sy, sc, sr;
+
+  if (comp === 'Hydrogen') {
+    sx = hrTempX(tc); sy = hrLumY(msLum(tc));
+    sc = tc > 7 ? '#99ccff' : tc < 4 ? '#ff6633' : '#ffffaa';
+    sr = 5;
+  } else if (comp === 'Helium') {
+    sx = hrTempX(Math.max(tc - 3.5, 1));
+    sy = hrLumY(msLum(tc) * 300);
+    sc = '#ff7744'; sr = 7;
+  } else {
+    sx = hrTempX(Math.min(tc + 4, 10));
+    sy = hrLumY(msLum(tc) * 0.004);
+    sc = '#ddeeff'; sr = 3;
+  }
+
+  // Glow
+  const grd = hc.createRadialGradient(sx, sy, 0, sx, sy, sr * 3.5);
+  grd.addColorStop(0, sc); grd.addColorStop(1, 'rgba(0,0,0,0)');
+  hc.beginPath(); hc.arc(sx, sy, sr * 3.5, 0, Math.PI * 2);
+  hc.fillStyle = grd; hc.fill();
+
+  hc.beginPath(); hc.arc(sx, sy, sr, 0, Math.PI * 2);
+  hc.fillStyle = sc; hc.fill();
+}
+
+// ─── RADIUS TRANSITION ───────────────────────────────────────────────────────
+function updateRadii(dt) {
+  const tCR = getCoreRadiusTarget(), tAR = getAtmRadiusTarget();
+  state.coreRadius = lerp(state.coreRadius, tCR, dt * 3);
+  state.atmRadius  = lerp(state.atmRadius,  tAR, dt * 3);
+  if (Math.abs(state.coreRadius - tCR) < 0.1) state.coreRadius = tCR;
+  if (Math.abs(state.atmRadius  - tAR) < 0.1) state.atmRadius  = tAR;
+}
+
+// ─── EVOLVE LOGIC ────────────────────────────────────────────────────────────
+function getEvolveDuration() {
+  if (state.composition === 'Carbon/Oxygen') return 300;
+  return 60 - (state.TempCore - 1) / 9 * 54;
+}
+
+function startEvolve() {
+  state.evolving = true; state.frozen = true;
+  state.evolveProgress = 0;
+  state.evolveDuration = getEvolveDuration();
+  state.evolveStartTime = performance.now();
+  compSelect.disabled = densitySlider.disabled = tempSlider.disabled = true;
+  evolveBtn.disabled = true;
+  lifetimeGroup.style.display = 'block';
+  lifetimeBarFill.style.width = '0%';
+  whiteDwarfText.style.display = state.composition === 'Carbon/Oxygen' ? 'block' : 'none';
+}
+
+function updateEvolve(now) {
+  if (!state.evolving) return;
+  const progress = Math.min((now - state.evolveStartTime) / 1000 / state.evolveDuration, 1);
+  state.evolveProgress = progress;
+  lifetimeBarFill.style.width = (progress * 100) + '%';
+  if (progress >= 1) {
+    state.evolving = false;
+    if (state.composition === 'Hydrogen') setComposition('Helium');
+    else if (state.composition === 'Helium') setComposition('Carbon/Oxygen');
+    state.frozen = false;
+    if (state.composition !== 'Carbon/Oxygen')
+      compSelect.disabled = densitySlider.disabled = tempSlider.disabled = false;
+    updateEvolveButton();
+  }
+}
+
+function setComposition(comp) {
+  state.composition = comp;
+  compSelect.value = comp;
+  // Always do a full reinit so all old spheres (including fusion products)
+  // are removed and replaced with fresh ones of the new composition's colour.
+  initNuclei();
+  updateEvolveButton();
+}
+
+function updateEvolveButton() {
+  evolveBtn.disabled = !(isIgnition() || state.composition === 'Carbon/Oxygen') || state.frozen;
+}
+
+// ─── EVENT LISTENERS ─────────────────────────────────────────────────────────
+compSelect.addEventListener('change', () => {
+  if (state.frozen) return;
+  state.composition = compSelect.value;
+  fusionParticles = [];
+  reinitNuclei(); updateEvolveButton();
+});
+
+densitySlider.addEventListener('input', () => {
+  if (state.frozen) return;
+  state.NCore = parseInt(densitySlider.value);
+  densityVal.textContent = state.NCore;
+  reinitNuclei(); updateEvolveButton();
+});
+
+tempSlider.addEventListener('input', () => {
+  if (state.frozen) return;
+  state.TempCore = parseInt(tempSlider.value);
+  tempVal.textContent = state.TempCore;
+  reinitNuclei(); updateEvolveButton();
+});
+
+evolveBtn.addEventListener('click', () => { if (!evolveBtn.disabled) startEvolve(); });
+
+pauseBtn.addEventListener('click', () => {
+  state.paused = !state.paused;
+  pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+  if (state.evolving && state.paused)
+    state._pausedElapsed = (performance.now() - state.evolveStartTime) / 1000;
+  if (state.evolving && !state.paused)
+    state.evolveStartTime = performance.now() - state._pausedElapsed * 1000;
+});
+
+resetBtn.addEventListener('click', () => {
+  Object.assign(state, {
+    composition: 'Hydrogen', NCore: 5, TempCore: 1,
+    coreRadius: 40, atmRadius: 100,
+    paused: false, evolving: false, evolveProgress: 0,
+    frozen: false, collisionCount: 0
+  });
+  compSelect.value = 'Hydrogen'; compSelect.disabled = false;
+  densitySlider.value = 5; densityVal.textContent = '5'; densitySlider.disabled = false;
+  tempSlider.value = 1; tempVal.textContent = '1'; tempSlider.disabled = false;
+  pauseBtn.textContent = 'Pause';
+  lifetimeGroup.style.display = 'none';
+  whiteDwarfText.style.display = 'none';
+  lifetimeBarFill.style.width = '0%';
+  initNuclei(); updateEvolveButton();
+});
+
+// ─── MAIN LOOP ────────────────────────────────────────────────────────────────
+let lastTime = null;
+function loop(now) {
+  if (!lastTime) lastTime = now;
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  if (!state.paused) {
+    time += dt;
+    updateRadii(dt);
+    updateNuclei(dt);
+    updateEvolve(now);
+  }
+
+  draw();
+  drawHR();
+  requestAnimationFrame(loop);
+}
+
+initNuclei();
+updateEvolveButton();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
