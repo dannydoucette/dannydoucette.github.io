@@ -605,13 +605,13 @@ function drawTrapezoidConvection(c, ccx, ccy, innerR, outerR, centerAngle, angW,
   c.beginPath();
   const HA = 0.45, HL = 8;
   // outward direction is the reverse of d_or_ir
-  const outDirX = -d_or_ir_x, outDirY = -d_or_ir_y;
+  const outDirX = d_or_ir_x, outDirY = d_or_ir_y;
   const tipX = brkStartX + outDirX * 2, tipY = brkStartY + outDirY * 2;
   const aDir = Math.atan2(outDirY, outDirX);
   c.moveTo(tipX, tipY);
-  c.lineTo(tipX - HL * Math.cos(aDir + HA), tipY - HL * Math.sin(aDir - HA));
+  c.lineTo(tipX - HL * Math.cos(aDir - HA), tipY - HL * Math.sin(aDir - HA));
   c.moveTo(tipX, tipY);
-  c.lineTo(tipX - HL * Math.cos(aDir - HA), tipY - HL * Math.sin(aDir + HA));
+  c.lineTo(tipX - HL * Math.cos(aDir + HA), tipY - HL * Math.sin(aDir + HA));
   c.stroke();
 
   // Continue right radial: break end → entry of IR corner, then round IR corner
