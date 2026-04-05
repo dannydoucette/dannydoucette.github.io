@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Nuclear Reactor Simulation</title></head>
+<body style="margin:0;padding:0;background:#fff;display:flex;justify-content:center;align-items:center;height:100vh;">
+<div style="width:800px;height:600px;background:#f0f0f0;display:flex;overflow:hidden;font-family:Arial,sans-serif;font-size:14px;">
+
+  <!-- CONTROL PANEL -->
+  <div style="width:200px;height:600px;background:#dcdcdc;border-right:2px solid #999;display:flex;flex-direction:column;align-items:center;padding:10px;box-sizing:border-box;position:relative;flex-shrink:0;">
+    <div style="font-weight:bold;text-align:center;margin-bottom:18px;">Nuclear reactor simulation</div>
+    <div style="width:100%;margin-bottom:14px;">
+      <label style="display:block;margin-bottom:4px;">Shielding</label>
+      <input type="range" id="shieldingSlider" min="0" max="3" step="1" value="0" style="width:100%;"
+        oninput="Shielding=parseInt(this.value);redraw();">
+      <div style="display:flex;justify-content:space-between;font-size:12px;"><span>0</span><span>1</span><span>2</span><span>3</span></div>
+    </div>
+    <div style="width:100%;margin-bottom:10px;"><label><input type="checkbox" id="fuelRodsCheck" onchange="FuelRods=this.checked;onFuelRodsChange();"> fuel rods</label></div>
+    <div style="width:100%;margin-bottom:10px;"><label><input type="checkbox" id="controlRodsCheck" onchange="ControlRods=this.checked;redraw();"> control rods</label></div>
+    <div style="width:100%;margin-bottom:18px;"><label><input type="checkbox" id="moderatorCheck" onchange="Moderator=this.checked;redraw();"> moderator</label></div>
+    <div style="width:100%;margin-bottom:4px;">System status:</div>
+    <div id="statusText" style="width:100%;color:#333;min-height:40px;word-wrap:break-word;"></div>
+    <button onclick="doReset()" style="margin-top:8px;font-family:Arial,sans-serif;font-size:14px;padding:4px 18px;cursor:pointer;">Reset</button>
+    <div style="position:absolute;bottom:12px;text-align:center;">
+      <div>Danny Doucette</div><div>thinkib.net/physics</div>
+    </div>
+  </div>
+
+  <!-- SIMULATION PANEL -->
+  <div style="width:600px;height:600px;background:#e8e8e8;position:relative;flex-shrink:0;">
+    <canvas id="simCanvas" width="600" height="600"
+      onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"
+      onmouseup="onMouseUp(event)" onmouseleave="onMouseUp(event)"></canvas>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+var Shielding=0,FuelRods=false,ControlRods=false,Moderator=false,Ignition=false;
+
+// ── Core layout ───────────────────────────────────────────────────────────────
+var coreCX=250,coreCY=300,coreSize=300;
+var coreLeft=100,coreTop=150,coreRight=400,coreBottom=450;
+
+// ── Heat exchanger ────────────────────────────────────────────────────────────
+var pipeW=70,pipeH=30,pipeHalf=15;
+var pipeTopY=220,pipeBotY=380;   // centreline Y of horizontal pipes
+var pipeEndX=coreRight+pipeW;    // 470: right end of horizontal pipes = left of S-curve
+var turbineX=530,turbineY=300;
+
+// ── S-curve parameters ────────────────────────────────────────────────────────
+// N semicircles, each of radius Rb, covering totalH = 2*N*Rb.
+// totalH = pipeBotY-pipeTopY = 160. N=5 → Rb = 160/(2*5) = 16.
+// All semicircles centred at x=pipeEndX.
+// Centre k: cy = pipeTopY + (2k+1)*Rb, k=0..N-1.
+// Bottom of last semicircle: pipeTopY + 2*N*Rb = 220 + 160 = 380 = pipeBotY ✓
+var SC_N=5, SC_Rb=16, SC_Ro=SC_Rb+pipeHalf, SC_Ri=SC_Rb-pipeHalf; // Ro=31, Ri=1
+
+// ── Colours ───────────────────────────────────────────────────────────────────
+function coreColor(){
+  if(Ignition) return '#ffaaaa';
+  if(Moderator) return '#aae8c0';
+  return '#add8e6';
+}
+function coolantDark(){
+  if(Ignition) return '#cc8888';
+  if(Moderator) return '#77bb99';
+  return '#7aaabb';
+}
+
+// ── Fuel rod geometry ─────────────────────────────────────────────────────────
+var NUM_FR=3, frH=28;
+var frSpY=(coreSize - NUM_FR*frH)/(NUM_FR+1);  // ~58px gap
+var frWidth=270, frRightX=coreRight-10;
+// frLeft = left edge of rods. Default=coreLeft-40. Range: coreLeft-80 to coreLeft-5.
+var frLeftDefault=coreLeft-45, frLeft=frLeftDefault;
+var fuelRodHandleX=0;
+var draggingFR=false, dragFRx0=0, dragFRleft0=0;
+
+function getFuelRodRect(i){
+  var y=coreTop+frSpY+i*(frH+frSpY);
+  return {x:frLeft, y:y, w:frWidth, h:frH};
+}
+
+// ── Control rod geometry ──────────────────────────────────────────────────────
+// 4 horizontal rods, mirroring fuel rods exactly:
+//   - Fixed WIDTH (crWidth), just like frWidth for fuel rods
+//   - crLeft is the draggable LEFT edge, just like frLeft for fuel rods
+//   - Handle on the left side
+// Default: crLeft = coreLeft+20 (right tip at coreLeft+20+crWidth, deep inside core)
+// Range: coreLeft+5 (nearly fully inserted) to coreRight-5 (nearly fully withdrawn)
+var NUM_CR=4, crH=frH;
+var crWidth=270;                      // same width as fuel rods
+var crLeftDefault=coreLeft-45, crLeft_=crLeftDefault;  // starts outside core left, like fuel rods
+var ctrlRodHandleX=0, crHandleYStored=300;
+var draggingCR=false, dragCRx0=0, dragCRleft0=0;
+
+function getCtrlRodRect(i){
+  // Gap centres: above FR0, between FR0&FR1, between FR1&FR2, below FR2
+  var gapCY;
+  if(i===0){
+    gapCY = coreTop + frSpY/2;
+  } else if(i<NUM_FR){
+    var frA=getFuelRodRect(i-1), frB=getFuelRodRect(i);
+    gapCY = (frA.y+frA.h + frB.y)/2;
+  } else {
+    var frLast=getFuelRodRect(NUM_FR-1);
+    gapCY = frLast.y+frLast.h + frSpY/2;
+  }
+  var y=gapCY - crH/2;
+  // Rod goes from crLeft_ to crLeft_+crWidth, just like fuel rods go frLeft to frLeft+frWidth
+  return {x:crLeft_, y:y, w:crWidth, h:crH};
+}
+
+// ── Particles ─────────────────────────────────────────────────────────────────
+var nuclei=[], neutrons=[], fragments=[];
+
+function createNucleus(rod){
+  return {rod:rod, x:0, y:0, rx:0, ry:0, vx:(Math.random()-.5)*.4, vy:(Math.random()-.5)*.4, r:7, state:'normal', wobbleT:0};
+}
+function placeNucleus(n){
+  // Place within rod using relative coordinates
+  var fr=getFuelRodRect(n.rod), m=n.r+3;
+  // rx is relative to fr.x, ry relative to fr.y
+  // clamp so nucleus stays visible inside core
+  var relLx=Math.max(0, coreLeft+m - fr.x);
+  var relRx=Math.min(fr.w, coreRight-m - fr.x);
+  n.rx=(relLx<relRx) ? relLx+Math.random()*(relRx-relLx) : fr.w/2;
+  n.ry=m+Math.random()*Math.max(1,fr.h-2*m);
+  n.x=fr.x+n.rx; n.y=fr.y+n.ry;
+}
+function syncNucleusPos(n){
+  // Recompute absolute position from rod + relative offset
+  var fr=getFuelRodRect(n.rod);
+  n.x=fr.x+n.rx; n.y=fr.y+n.ry;
+}
+function initNuclei(){
+  nuclei=[];
+  for(var i=0;i<NUM_FR;i++) for(var j=0;j<10;j++){var n=createNucleus(i);placeNucleus(n);nuclei.push(n);}
+}
+function spawnNeutron(x,y,fast){
+  var spd=fast?(3+Math.random()*2):(.8+Math.random()*.5), a=Math.random()*Math.PI*2;
+  neutrons.push({x:x,y:y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,fast:fast,r:4});
+}
+function initNeutrons(){
+  neutrons=[];
+  for(var i=0;i<6;i++) spawnNeutron(coreLeft+20+Math.random()*(coreSize-40), coreTop+20+Math.random()*(coreSize-40), false);
+}
+function spawnEdgeNeutron(){
+  var side=Math.floor(Math.random()*4), x, y;
+  if(side===0){x=coreLeft+Math.random()*coreSize; y=coreTop+2;}
+  else if(side===1){x=coreRight-2; y=coreTop+Math.random()*coreSize;}
+  else if(side===2){x=coreLeft+Math.random()*coreSize; y=coreBottom-2;}
+  else {x=coreLeft+2; y=coreTop+Math.random()*coreSize;}
+  spawnNeutron(x,y,false);
+}
+
+// ── Fission tracking ──────────────────────────────────────────────────────────
+var fissionTimes=[];
+function recordFission(){fissionTimes.push(performance.now());}
+function recentFissions(){
+  var now=performance.now();
+  fissionTimes=fissionTimes.filter(function(t){return now-t<10000;});
+  return fissionTimes.length;
+}
+
+// ── Physics ───────────────────────────────────────────────────────────────────
+var lastTime=0, lastEdgeNeutronTime=0;
+
+function updateNuclei(dt){
+  for(var i=nuclei.length-1;i>=0;i--){
+    var n=nuclei[i], fr=getFuelRodRect(n.rod), m=n.r+2;
+    // Move relative coords, then compute absolute
+    var relLx=Math.max(0, coreLeft+m - fr.x);
+    var relRx=Math.min(fr.w, coreRight-m - fr.x);
+    if(n.state==='normal'){
+      n.rx+=n.vx; n.ry+=n.vy;
+      if(n.rx<relLx){n.rx=relLx; n.vx=Math.abs(n.vx);}
+      if(n.rx>relRx){n.rx=relRx; n.vx=-Math.abs(n.vx);}
+      if(n.ry<m){n.ry=m; n.vy=Math.abs(n.vy);}
+      if(n.ry>fr.h-m){n.ry=fr.h-m; n.vy=-Math.abs(n.vy);}
+      n.x=fr.x+n.rx; n.y=fr.y+n.ry;
+    } else if(n.state==='wobbling'){
+      n.wobbleT+=dt;
+      if(n.wobbleT>=3.0){
+        var nx=n.x, ny=n.y, rod=n.rod;
+        nuclei.splice(i,1);
+        var a=Math.random()*Math.PI*2, spd=1.5+Math.random();
+        fragments.push({x:nx,y:ny,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,r:5});
+        fragments.push({x:nx,y:ny,vx:-Math.cos(a)*spd,vy:-Math.sin(a)*spd,r:5});
+        for(var k=0;k<3;k++) spawnNeutron(nx,ny,true);
+        recordFission();
+        (function(rd){setTimeout(function(){if(FuelRods){var nn=createNucleus(rd);placeNucleus(nn);nuclei.push(nn);}},2000);})(rod);
+      }
+    }
+  }
+}
+
+function updateNeutrons(dt){
+  for(var i=neutrons.length-1;i>=0;i--){
+    var n=neutrons[i];
+    // Moderator slows fast neutrons
+    if(n.fast&&Moderator){
+      var sp=Math.sqrt(n.vx*n.vx+n.vy*n.vy);
+      if(sp>1.2){n.vx*=(1-dt*.6); n.vy*=(1-dt*.6);} else n.fast=false;
+    }
+    n.x+=n.vx; n.y+=n.vy;
+
+    // Wall collision: 20% chance of absorption, 80% bounce
+    var gone=false;
+    if(n.x<coreLeft+n.r){
+      if(Math.random()<0.2){neutrons.splice(i,1);gone=true;}
+      else{n.x=coreLeft+n.r; n.vx=Math.abs(n.vx);}
+    } else if(n.x>coreRight-n.r){
+      if(Math.random()<0.2){neutrons.splice(i,1);gone=true;}
+      else{n.x=coreRight-n.r; n.vx=-Math.abs(n.vx);}
+    } else if(n.y<coreTop+n.r){
+      if(Math.random()<0.2){neutrons.splice(i,1);gone=true;}
+      else{n.y=coreTop+n.r; n.vy=Math.abs(n.vy);}
+    } else if(n.y>coreBottom-n.r){
+      if(Math.random()<0.2){neutrons.splice(i,1);gone=true;}
+      else{n.y=coreBottom-n.r; n.vy=-Math.abs(n.vy);}
+    }
+    if(gone) continue;
+
+    // Control rod collision: 20% absorption, 80% bounce off surface
+    if(ControlRods){
+      var absorbed=false;
+      for(var c=0;c<NUM_CR;c++){
+        var cr=getCtrlRodRect(c);
+        if(n.x>cr.x&&n.x<cr.x+cr.w&&n.y>cr.y&&n.y<cr.y+cr.h){
+          if(Math.random()<0.2){
+            neutrons.splice(i,1); absorbed=true;
+          } else {
+            // Bounce: push out of rod and reverse whichever velocity component entered
+            // Determine entry direction by which face is closest
+            var dLeft=n.x-cr.x, dRight=(cr.x+cr.w)-n.x;
+            var dTop=n.y-cr.y, dBot=(cr.y+cr.h)-n.y;
+            var minD=Math.min(dLeft,dRight,dTop,dBot);
+            if(minD===dLeft){n.x=cr.x-n.r; n.vx=-Math.abs(n.vx);}
+            else if(minD===dRight){n.x=cr.x+cr.w+n.r; n.vx=Math.abs(n.vx);}
+            else if(minD===dTop){n.y=cr.y-n.r; n.vy=-Math.abs(n.vy);}
+            else{n.y=cr.y+cr.h+n.r; n.vy=Math.abs(n.vy);}
+          }
+          break;
+        }
+      }
+      if(absorbed) continue;
+    }
+
+    // Nucleus collision (slow neutrons only)
+    if(!n.fast&&FuelRods){
+      var hit=false;
+      for(var j=0;j<nuclei.length;j++){
+        var nuc=nuclei[j]; if(nuc.state!=='normal') continue;
+        var dx=n.x-nuc.x, dy=n.y-nuc.y;
+        if(dx*dx+dy*dy<(n.r+nuc.r)*(n.r+nuc.r)){
+          nuc.state='wobbling'; nuc.wobbleT=0;
+          neutrons.splice(i,1); hit=true; break;
+        }
+      }
+      if(hit) continue;
+    }
+  }
+}
+
+function updateFragments(){
+  for(var i=fragments.length-1;i>=0;i--){
+    var f=fragments[i]; f.x+=f.vx; f.y+=f.vy;
+    if(f.x<coreLeft||f.x>coreRight||f.y<coreTop||f.y>coreBottom){fragments.splice(i,1); continue;}
+    if(ControlRods){
+      var kill=false;
+      for(var c=0;c<NUM_CR;c++){var cr=getCtrlRodRect(c); if(f.x>cr.x&&f.x<cr.x+cr.w&&f.y>cr.y&&f.y<cr.y+cr.h){kill=true;break;}}
+      if(kill){fragments.splice(i,1);}
+    }
+  }
+}
+
+// ── Mouse drag ────────────────────────────────────────────────────────────────
+function onMouseDown(e){
+  var r=e.target.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  if(FuelRods && Math.abs(mx-fuelRodHandleX)<22 && Math.abs(my-coreCY)<35)
+    {draggingFR=true; dragFRx0=mx; dragFRleft0=frLeft;}
+  if(ControlRods && Math.abs(mx-ctrlRodHandleX)<22 && Math.abs(my-crHandleYStored)<35)
+    {draggingCR=true; dragCRx0=mx; dragCRleft0=crLeft_;}
+}
+function onMouseMove(e){
+  var r=e.target.getBoundingClientRect(), mx=e.clientX-r.left;
+  if(draggingFR){frLeft=Math.max(coreLeft-80, Math.min(coreLeft-5, dragFRleft0+(mx-dragFRx0)));}
+  // Control rods: crLeft_ moves like frLeft (dragging left = insert more, right = withdraw)
+  // Range: left edge from coreLeft+5 (deep insert) to coreRight-5 (nearly withdrawn)
+  if(draggingCR){crLeft_=Math.max(coreLeft-80, Math.min(coreLeft-5, dragCRleft0+(mx-dragCRx0)));}
+}
+function onMouseUp(){draggingFR=false; draggingCR=false;}
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+var canvas=document.getElementById('simCanvas');
+var ctx=canvas.getContext('2d');
+
+// ── Draw helpers ──────────────────────────────────────────────────────────────
+function arrowH(x1,x2,y){
+  ctx.save(); ctx.strokeStyle='#333'; ctx.fillStyle='#333'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(x1,y); ctx.lineTo(x2,y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x1,y); ctx.lineTo(x1+8,y-4); ctx.lineTo(x1+8,y+4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x2,y); ctx.lineTo(x2-8,y-4); ctx.lineTo(x2-8,y+4); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawStickFigure(x,y,color){
+  ctx.save(); ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x,y+10); ctx.lineTo(x,y+40); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x-15,y+20); ctx.lineTo(x+15,y+20); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x,y+40); ctx.lineTo(x-12,y+62); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x,y+40); ctx.lineTo(x+12,y+62); ctx.stroke();
+  ctx.restore();
+}
+function drawMachinePanel(x,y){
+  ctx.fillStyle='#888'; ctx.fillRect(x,y,40,50);
+  ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.strokeRect(x,y,40,50);
+  ctx.fillStyle='#333'; ctx.fillRect(x+5,y+8,30,8);
+  ctx.fillStyle='#0c0'; ctx.fillRect(x+5,y+22,10,8);
+  ctx.fillStyle='#c00'; ctx.fillRect(x+20,y+22,10,8);
+  ctx.fillStyle='#555'; ctx.fillRect(x+5,y+36,30,8);
+}
+function drawRadiationArrow(sx,sy,ux,uy,label){
+  ctx.save(); ctx.strokeStyle='red'; ctx.fillStyle='red'; ctx.lineWidth=1.5;
+  var len=70, ex=sx+ux*len, ey=sy+uy*len;
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+  var hl=10, ang=Math.atan2(uy,ux);
+  ctx.beginPath(); ctx.moveTo(ex,ey);
+  ctx.lineTo(ex-hl*Math.cos(ang-.4),ey-hl*Math.sin(ang-.4));
+  ctx.lineTo(ex-hl*Math.cos(ang+.4),ey-hl*Math.sin(ang+.4));
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle='red'; ctx.font='12px Arial'; ctx.textAlign='left';
+  ctx.fillText(label,ex+4,ey-12);
+  ctx.restore();
+}
+function drawNucleus(n){
+  ctx.save();
+  var x=n.x, y=n.y, r=n.r;
+  if(n.state==='wobbling'){x+=Math.sin(n.wobbleT*8*Math.PI*2)*3; y+=Math.cos(n.wobbleT*10*Math.PI*2)*2; r+=Math.sin(n.wobbleT*8*Math.PI*2)*1.5;}
+  var g=ctx.createRadialGradient(x-r*.3,y-r*.3,r*.1,x,y,r);
+  g.addColorStop(0,'#ff9999'); g.addColorStop(.6,'#cc2222'); g.addColorStop(1,'#880000');
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  ctx.restore();
+}
+function drawNeutron(n){
+  ctx.save();
+  var g=ctx.createRadialGradient(n.x-1,n.y-1,.5,n.x,n.y,n.r);
+  g.addColorStop(0,'#aaffaa'); g.addColorStop(1,'#006600');
+  ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  ctx.restore();
+}
+function drawFragment(f){
+  ctx.save(); ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fillStyle='#ddcc00'; ctx.fill(); ctx.restore();
+}
+
+// ── S-curve: N semicircular annular sectors ───────────────────────────────────
+// Rb=16, N=5: totalH=2*5*16=160=pipeBotY-pipeTopY ✓
+// Semicircle k: centre=(pipeEndX, pipeTopY+(2k+1)*Rb), radius Rb.
+// All centred at x=pipeEndX. Right/left bulge alternates.
+// Outer radius Ro=Rb+pipeHalf=31, inner Ri=Rb-pipeHalf=1.
+function drawSCurve(col){
+  var cx=pipeEndX;
+  for(var k=0;k<SC_N;k++){
+    var dir=(k%2===0)?1:-1;  // +1=right bulge, -1=left
+    var cy=pipeTopY+(2*k+1)*SC_Rb;
+    var sa=-Math.PI/2, ea=Math.PI/2, ccw=(dir<0);
+
+    // Black border (outer arc + inner arc stroked thick)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx,cy,SC_Ro,sa,ea,ccw);
+    ctx.strokeStyle='#000'; ctx.lineWidth=4; ctx.lineCap='butt'; ctx.stroke();
+    ctx.restore();
+
+    // Filled annular sector
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx,cy,SC_Ro,sa,ea,ccw);
+    if(SC_Ri>0){
+      ctx.arc(cx,cy,SC_Ri,ea,sa,!ccw);
+    } else {
+      ctx.lineTo(cx,cy);
+    }
+    ctx.closePath();
+    ctx.fillStyle=col; ctx.fill();
+    ctx.restore();
+
+    // Inner border
+    if(SC_Ri>0){
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx,cy,SC_Ri,sa,ea,ccw);
+      ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.lineCap='butt'; ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Fill tiny junction strips to eliminate aliasing gaps between adjacent arcs
+  ctx.fillStyle=col;
+  for(var k=1;k<SC_N;k++){
+    var jy=pipeTopY+2*k*SC_Rb;
+    ctx.fillRect(cx-SC_Ro, jy-1, 2*SC_Ro, 3);
+  }
+}
+
+// ── Heat exchanger ────────────────────────────────────────────────────────────
+function drawHeatExchanger(){
+  var col=coreColor();
+
+  // Coolant background rectangles (drawn first, behind S-curve and pipes)
+  var outerLeft=pipeEndX, outerRight=turbineX+25;
+  var outerTop=pipeTopY-pipeHalf-8, outerBot=pipeBotY+pipeHalf+8;
+  var innerLeft=pipeEndX+SC_Ro+4, innerRight=turbineX-10;
+  var innerTop=pipeTopY-pipeHalf+5, innerBot=pipeBotY+pipeHalf-5;
+
+  ctx.fillStyle=coolantDark();
+  ctx.fillRect(outerLeft,outerTop,outerRight-outerLeft,outerBot-outerTop);
+  ctx.fillStyle='#e8e8e8';
+  ctx.fillRect(innerLeft,innerTop,innerRight-innerLeft,innerBot-innerTop);
+  ctx.strokeStyle='#000'; ctx.lineWidth=2;
+  ctx.strokeRect(outerLeft,outerTop,outerRight-outerLeft,outerBot-outerTop);
+  ctx.strokeRect(innerLeft,innerTop,innerRight-innerLeft,innerBot-innerTop);
+
+  // S-curve
+  drawSCurve(col);
+
+  // (top pipe drawn after shielding in draw())
+
+}
+
+// ── Main draw ─────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,600,600);
+  Ignition=(recentFissions()>6);
+
+  var shieldPx=0;
+  if(Shielding===1)shieldPx=5; else if(Shielding===2)shieldPx=20; else if(Shielding===3)shieldPx=40;
+
+  // Heat exchanger (behind everything)
+  drawHeatExchanger();
+
+  // Turbine
+  ctx.beginPath();
+  ctx.moveTo(turbineX,turbineY-30); ctx.lineTo(turbineX+50,turbineY-20);
+  ctx.lineTo(turbineX+50,turbineY+20); ctx.lineTo(turbineX,turbineY+30);
+  ctx.closePath(); ctx.fillStyle='#aaa'; ctx.fill();
+  ctx.strokeStyle='#555'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#333'; ctx.font='12px Arial'; ctx.textAlign='center';
+  ctx.fillText('turbine',turbineX+25,turbineY+5);
+
+  // Shielding border (always shown; gaps on right for pipes)
+  if(shieldPx>0){
+    ctx.fillStyle='#aaa';
+    ctx.fillRect(coreLeft-shieldPx, coreTop-shieldPx, coreSize+shieldPx*2, shieldPx);
+    ctx.fillRect(coreLeft-shieldPx, coreBottom, coreSize+shieldPx*2, shieldPx);
+    ctx.fillRect(coreLeft-shieldPx, coreTop, shieldPx, coreSize);
+    var gT=pipeTopY-pipeHalf, gB=pipeBotY+pipeHalf;
+    ctx.fillRect(coreRight, coreTop, shieldPx, gT-coreTop);
+    ctx.fillRect(coreRight, gT+pipeH, shieldPx, gB-gT-pipeH);
+    ctx.fillRect(coreRight, gB, shieldPx, coreBottom-gB);
+  }
+
+  // Top horizontal pipe drawn here (on top of shielding)
+  var colp=coreColor();
+  ctx.fillStyle='#000';
+  ctx.fillRect(coreRight, pipeTopY-pipeHalf-2, pipeW, 2);
+  ctx.fillRect(coreRight, pipeTopY+pipeHalf,   pipeW, 2);
+  ctx.fillStyle=colp;
+  ctx.fillRect(coreRight, pipeTopY-pipeHalf, pipeW, pipeH);
+
+  // Bottom horizontal pipe drawn here (on top of shielding)
+  var col2=coreColor();
+  ctx.fillStyle='#000';
+  ctx.fillRect(coreRight, pipeBotY-pipeHalf-2, pipeW, 2);   // top edge
+  ctx.fillRect(coreRight, pipeBotY+pipeHalf,   pipeW, 2);   // bottom edge
+  ctx.fillStyle=col2;
+  ctx.fillRect(coreRight, pipeBotY-pipeHalf, pipeW, pipeH);
+
+  // Reactor core fill + border
+  var col=coreColor();
+  ctx.fillStyle=col;
+  ctx.fillRect(coreLeft,coreTop,coreSize,coreSize);
+  // Draw core border as 4 individual segments, with gaps on right side for pipes
+  ctx.strokeStyle='#000'; ctx.lineWidth=3;
+  ctx.beginPath();
+  // Top side
+  ctx.moveTo(coreLeft,coreTop); ctx.lineTo(coreRight,coreTop);
+  // Left side
+  ctx.moveTo(coreLeft,coreTop); ctx.lineTo(coreLeft,coreBottom);
+  // Bottom side
+  ctx.moveTo(coreLeft,coreBottom); ctx.lineTo(coreRight,coreBottom);
+  // Right side: three segments avoiding pipe openings
+  ctx.moveTo(coreRight,coreTop); ctx.lineTo(coreRight,pipeTopY-pipeHalf);
+  ctx.moveTo(coreRight,pipeTopY+pipeHalf); ctx.lineTo(coreRight,pipeBotY-pipeHalf);
+  ctx.moveTo(coreRight,pipeBotY+pipeHalf); ctx.lineTo(coreRight,coreBottom);
+  ctx.stroke();
+  ctx.fillStyle='#000'; ctx.font='14px Arial'; ctx.textAlign='right';
+  ctx.fillText('reactor core',coreRight,coreTop-6);
+
+  // Control rods drawn on top of core fill
+  if(ControlRods){
+    for(var c=0;c<NUM_CR;c++){
+      var cr=getCtrlRodRect(c);
+      ctx.fillStyle='rgba(170,170,170,0.85)';
+      ctx.fillRect(cr.x,cr.y,cr.w,cr.h);
+      ctx.strokeStyle='#666'; ctx.lineWidth=1.2;
+      ctx.strokeRect(cr.x,cr.y,cr.w,cr.h);
+    }
+    // Left connector line + handle
+    var cr0=getCtrlRodRect(0), crN=getCtrlRodRect(NUM_CR-1);
+    var handleX=crLeft_;
+    ctrlRodHandleX=handleX;
+    ctx.strokeStyle='#777'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(handleX, cr0.y); ctx.lineTo(handleX, crN.y+crN.h); ctx.stroke();
+    var cr1=getCtrlRodRect(1);
+    var crHandleY=cr1.y+cr1.h/2;
+    crHandleYStored=crHandleY;
+    arrowH(handleX-28, handleX+28, crHandleY);
+  }
+
+  // Fuel rods (on top of everything in core)
+  if(FuelRods){
+    for(var i=0;i<NUM_FR;i++){
+      var fr=getFuelRodRect(i);
+      ctx.fillStyle='rgba(255,180,180,0.85)';
+      ctx.fillRect(fr.x,fr.y,fr.w,fr.h);
+      ctx.strokeStyle='#cc5555'; ctx.lineWidth=1.2;
+      ctx.strokeRect(fr.x,fr.y,fr.w,fr.h);
+    }
+    var fr0=getFuelRodRect(0), frN=getFuelRodRect(NUM_FR-1);
+    fuelRodHandleX=frLeft;
+    ctx.strokeStyle='#cc4444'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(frLeft,fr0.y); ctx.lineTo(frLeft,frN.y+frN.h); ctx.stroke();
+    arrowH(frLeft-28, frLeft+28, coreCY);
+
+    // Nuclei clipped to core
+    ctx.save();
+    ctx.beginPath(); ctx.rect(coreLeft+2,coreTop+2,coreSize-4,coreSize-4); ctx.clip();
+    for(var i=0;i<nuclei.length;i++) drawNucleus(nuclei[i]);
+    ctx.restore();
+  }
+
+  // Neutrons + fragments clipped to core
+  ctx.save();
+  ctx.beginPath(); ctx.rect(coreLeft+2,coreTop+2,coreSize-4,coreSize-4); ctx.clip();
+  for(var i=0;i<neutrons.length;i++) drawNeutron(neutrons[i]);
+  for(var i=0;i<fragments.length;i++) drawFragment(fragments[i]);
+  ctx.restore();
+
+  // Stick figure + machine panel
+  var figX=coreCX-220, figY=coreTop-100;
+  var figColor=(FuelRods&&Shielding<3)?'red':'black';
+  drawStickFigure(figX,figY,figColor);
+  drawMachinePanel(figX+25,figY-10);
+
+  // Radiation arrows
+  if(FuelRods){
+    var arrows=[];
+    if(Shielding===0) arrows=['alpha','beta','gamma','neutrons'];
+    else if(Shielding===1) arrows=['beta','gamma','neutrons'];
+    else if(Shielding===2) arrows=['gamma','neutrons'];
+    if(arrows.length>0){
+      var deg=270-15, rad2=deg*Math.PI/180, ux=Math.cos(rad2), uy=Math.sin(rad2);
+      var spread=160, baseCX=coreCX-20, baseX=baseCX-spread/2;
+      var sp=spread/Math.max(arrows.length-1,1);
+      for(var i=0;i<arrows.length;i++){
+        var sx=(arrows.length===1)?baseCX:baseX+i*sp;
+        drawRadiationArrow(sx,coreTop+10,ux,uy,arrows[i]);
+      }
+    }
+  }
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function updateStatus(){
+  var rf=recentFissions(); Ignition=(rf>6);
+  var s='';
+  if(!FuelRods) s='Reactor offline';
+  else if(rf>=14) s='Criticality! Insert control rods!';
+  else if(Ignition) s='Operational';
+  else if(Shielding===0) s='WARNING: No shielding!';
+  else if(Shielding<3) s='Partial shielding active';
+  else s='Fuel rods active';
+  document.getElementById('statusText').textContent=s;
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+function doReset(){
+  Shielding=0; FuelRods=false; ControlRods=false; Moderator=false; Ignition=false;
+  frLeft=frLeftDefault; crLeft_=crLeftDefault;
+  nuclei=[]; neutrons=[]; fragments=[]; fissionTimes=[];
+  document.getElementById('shieldingSlider').value=0;
+  document.getElementById('fuelRodsCheck').checked=false;
+  document.getElementById('controlRodsCheck').checked=false;
+  document.getElementById('moderatorCheck').checked=false;
+  draw(); updateStatus();
+}
+
+// ── Animation loop ────────────────────────────────────────────────────────────
+var animRunning=false;
+function loop(ts){
+  var dt=Math.min((ts-lastTime)/1000,.05); lastTime=ts;
+  if(ts-lastEdgeNeutronTime>2000){spawnEdgeNeutron(); lastEdgeNeutronTime=ts;}
+  updateNeutrons(dt);
+  if(FuelRods){updateNuclei(dt); updateFragments(dt);}
+  draw(); updateStatus();
+  if(animRunning) requestAnimationFrame(loop);
+}
+function startAnim(){
+  if(!animRunning){animRunning=true; lastTime=performance.now(); lastEdgeNeutronTime=performance.now()-1500; requestAnimationFrame(loop);}
+}
+function onFuelRodsChange(){
+  if(FuelRods){initNuclei(); initNeutrons();}
+  else{nuclei=[]; neutrons=[]; fragments=[]; fissionTimes=[]; Ignition=false;}
+}
+function redraw(){if(!animRunning){draw(); updateStatus();}}
+
+draw(); updateStatus(); startAnim();
+</script>
+</body>
+</html>
