@@ -1,0 +1,174 @@
+Q1: A car travels 40 m east and then 30 m north. What is the magnitude of the car's displacement?
+[no image]
+A) 10 m
+B) 50 m [correct]
+C) 70 m
+D) 35 m
+
+Q2: Two stones are dropped from the top of a tall building. First stone A is released, and then 0.5 seconds later stone B is released. Both stones are released from rest, and drag forces are negligible. How does the distance between the stones change as they both fall?
+[no image]
+A) The distance decreases
+B) The distance stays constant
+C) The distance increases [correct]
+D) The distance decreases, and then increases
+
+Q3: A ball is thrown horizontally from the edge of a cliff with speed 15 m s⁻¹. The ball lands 45 m from the base of the cliff. What is the height of the cliff? (Take g = 10 m s⁻²)
+[no image]
+A) 30 m
+B) 22.5 m
+C) 45 m [correct]
+D) 15 m
+
+Q4: A block of mass 4 kg is pulled along a frictionless surface by a horizontal net force of 12 N. What is the acceleration of the block?
+[no image]
+A) 48 m s⁻²
+B) 0.33 m s⁻²
+C) 3 m s⁻² [correct]
+D) 16 m s⁻²
+
+Q5: A force of 20 N acts on an object at an angle of 30° above the horizontal. What is the horizontal component of this force?
+[diagram:force_components]
+A) 10 N
+B) 17.3 N [correct]
+C) 20 N
+D) 11.5 N
+
+Q6: An object of mass 2 kg is lifted vertically through a height of 5 m at constant speed. What is the work done against gravity? (Take g = 10 m s⁻²)
+[no image]
+A) 5 J
+B) 25 J
+C) 100 J [correct]
+D) 50 J
+
+Q7: A spring has spring constant k = 200 N m⁻¹. It is compressed by 0.1 m from its natural length. What is the elastic potential energy stored in the spring?
+[no image]
+A) 20 J
+B) 2 J
+C) 0.1 J
+D) 1 J [correct]
+
+Q8: A ball of mass 0.5 kg moving at 6 m s⁻¹ collides with a stationary ball of equal mass and sticks to it. What is the speed of the combined mass after the collision?
+[no image]
+A) 6 m s⁻¹
+B) 12 m s⁻¹
+C) 3 m s⁻¹ [correct]
+D) 1.5 m s⁻¹
+
+Q9: Which of the following best describes a perfectly inelastic collision?
+[no image]
+A) Both kinetic energy and momentum are conserved
+B) Kinetic energy is conserved but momentum is not
+C) Momentum is conserved and the objects stick together [correct]
+D) Neither kinetic energy nor momentum is conserved
+
+Q10: A wave has frequency 500 Hz and wavelength 0.68 m. What is the speed of the wave?
+[no image]
+A) 735 m s⁻¹
+B) 680 m s⁻¹
+C) 340 m s⁻¹ [correct]
+D) 170 m s⁻¹
+
+Q11: Two wave sources S₁ and S₂ are coherent and in phase. Point P is located such that it is 3.5 wavelengths from S₁ and 5.0 wavelengths from S₂. What type of interference occurs at P?
+[diagram:interference_path]
+A) Constructive, because the path difference is a whole number
+B) Destructive, because the path difference is 1.5λ [correct]
+C) Constructive, because both distances are greater than 1λ
+D) No interference, because the sources are too far apart
+
+Q12: A ray of light passes from air into glass at an angle of incidence of 45°. The refractive index of the glass is 1.5. What is the angle of refraction?
+[diagram:refraction]
+A) 45°
+B) 67°
+C) 19°
+D) 28° [correct]
+
+Q13: Which of the following correctly describes what happens to the speed, frequency, and wavelength of light when it passes from air into a denser medium?
+[no image]
+A) Speed decreases, frequency decreases, wavelength decreases
+B) Speed decreases, frequency unchanged, wavelength decreases [correct]
+C) Speed unchanged, frequency increases, wavelength decreases
+D) Speed decreases, frequency increases, wavelength unchanged
+
+Q14: A wire carries a current of 3 A. How much charge passes through a cross-section of the wire in 4 seconds?
+[no image]
+A) 0.75 C
+B) 1.33 C
+C) 7 C
+D) 12 C [correct]
+
+Q15: Three resistors of 6 Ω, 3 Ω, and 2 Ω are connected in parallel. What is the combined resistance?
+[diagram:parallel_resistors]
+A) 11 Ω
+B) 1 Ω [correct]
+C) 5.5 Ω
+D) 3.67 Ω
+
+Q16: A cell of EMF 12 V has internal resistance 2 Ω. It is connected to an external resistance of 4 Ω. What is the terminal voltage of the cell?
+[no image]
+A) 12 V
+B) 6 V
+C) 4 V
+D) 8 V [correct]
+
+Q17: An electron moves perpendicular to a uniform magnetic field of 0.2 T with a speed of 3 × 10⁶ m s⁻¹. What is the magnitude of the magnetic force on the electron? (e = 1.6 × 10⁻¹⁹ C)
+[no image]
+A) 9.6 × 10⁻¹⁴ N [correct]
+B) 9.6 × 10⁻²⁶ N
+C) 6.0 × 10⁻¹⁴ N
+D) 3.2 × 10⁻¹⁴ N
+
+Q18: An ideal gas is compressed isothermally. Which of the following statements is correct?
+[no image]
+A) The internal energy of the gas increases
+B) The temperature of the gas increases
+C) The pressure of the gas increases [correct]
+D) The number of molecules decreases
+
+Q19: Which graph correctly shows the relationship between pressure P and volume V for a fixed mass of ideal gas at constant temperature?
+[diagram:pv_graph]
+A) A straight line through the origin with positive gradient
+B) A hyperbola (P inversely proportional to V) [correct]
+C) A straight horizontal line
+D) A straight line with negative gradient not passing through origin
+
+Q20: The temperature of an ideal gas is raised from 300 K to 600 K at constant volume. By what factor does the pressure change?
+[no image]
+A) It remains the same
+B) It doubles [correct]
+C) It quadruples
+D) It halves
+
+Q21: A nucleus of uranium-238 (²³⁸₉₂U) undergoes alpha decay. What is the resulting nucleus?
+[no image]
+A) ²³⁴₉₀Th [correct]
+B) ²³⁸₉₃Np
+C) ²³⁴₉₂U
+D) ²³⁶₉₀Th
+
+Q22: The half-life of a radioactive isotope is 8 days. A sample initially contains 6.4 × 10⁸ atoms. How many atoms remain after 32 days?
+[no image]
+A) 4.0 × 10⁷ atoms [correct]
+B) 1.6 × 10⁸ atoms
+C) 8.0 × 10⁷ atoms
+D) 3.2 × 10⁷ atoms
+
+Q23: Which of the following statements about the photoelectric effect provides evidence for the particle nature of light?
+[no image]
+A) Increasing light intensity increases the kinetic energy of emitted electrons
+B) Light below a threshold frequency ejects no electrons regardless of intensity [correct]
+C) The number of electrons emitted increases with increasing wavelength
+D) The photoelectric effect occurs only in metals with low density
+
+Q24: In the Bohr model of the hydrogen atom, an electron moves from energy level n = 3 to n = 1. What type of radiation is emitted and why?
+[diagram:energy_levels]
+A) Infrared, because n = 1 is the lowest energy level
+B) Visible light, because the energy difference is small
+C) Ultraviolet, because the energy difference is large [correct]
+D) X-rays, because electrons are involved in the transition
+
+Q25: A photon has energy 4.0 eV. What is the wavelength of this photon? (h = 6.63 × 10⁻³⁴ J s, c = 3.0 × 10⁸ m s⁻¹, 1 eV = 1.6 × 10⁻¹⁹ J)
+[no image]
+A) 620 nm
+B) 490 nm
+C) 410 nm
+D) 311 nm [correct]
