@@ -1,0 +1,125 @@
+
+<div style="width:800px;height:600px;position:relative;overflow:hidden;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);font-family:var(--font-sans);">
+<h2 class="sr-only">Coulomb force simulation: two charged balloons hanging from strings, deflected by electrostatic repulsion.</h2>
+<canvas id="simCanvas" width="800" height="600" style="position:absolute;top:0;left:0;cursor:crosshair;"></canvas>
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+const BAR_Y = 60;
+const BAR_X1 = 100, BAR_X2 = 700;
+const STRING_L = 220;
+const BALLOON_R = 28;
+const g = 9.8;
+const k = 8.99e9;
+const pxPerMeter = 1000;
+const q = 200e-9;
+const mass = 0.002;
+
+let anchor1 = 300, anchor2 = 500;
+let bx1, by1, bx2, by2;
+
+let isDark = false;
+function getTheme() {
+  isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function computeEquilibrium() {
+  const anchorSepM = (anchor2 - anchor1) / pxPerMeter;
+  let lo = 0, hi = Math.PI / 2 - 0.0001;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    const sepM = Math.max(anchorSepM + 2 * (STRING_L / pxPerMeter) * Math.sin(mid), 0.001);
+    const F = k * q * q / (sepM * sepM);
+    if (Math.tan(mid) < F / (mass * g)) lo = mid;
+    else hi = mid;
+  }
+  const theta = (lo + hi) / 2;
+  bx1 = anchor1 - STRING_L * Math.sin(theta);
+  bx2 = anchor2 + STRING_L * Math.sin(theta);
+  by1 = by2 = BAR_Y + STRING_L * Math.cos(theta);
+}
+
+let dragging = null;
+
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  if (Math.sqrt((mx-anchor1)**2+(my-BAR_Y)**2) < 14) { dragging = 'a1'; return; }
+  if (Math.sqrt((mx-anchor2)**2+(my-BAR_Y)**2) < 14) { dragging = 'a2'; return; }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  if (!dragging) return;
+  if (dragging === 'a1') { anchor1 = Math.max(BAR_X1+30, Math.min(anchor2-10, mx)); computeEquilibrium(); draw(); }
+  if (dragging === 'a2') { anchor2 = Math.max(anchor1+10, Math.min(BAR_X2-30, mx)); computeEquilibrium(); draw(); }
+});
+
+canvas.addEventListener('mouseup', () => { dragging = null; });
+
+function draw() {
+  getTheme();
+  ctx.clearRect(0, 0, 800, 600);
+  ctx.fillStyle = isDark ? '#151515' : '#f8f7f3';
+  ctx.fillRect(0, 0, 800, 600);
+
+  const barCol = isDark ? '#888' : '#8B7355';
+  ctx.strokeStyle = barCol;
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(BAR_X1, BAR_Y); ctx.lineTo(BAR_X2, BAR_Y); ctx.stroke();
+
+  for (let x = BAR_X1; x <= BAR_X2; x += 20) {
+    ctx.strokeStyle = barCol;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, BAR_Y-8); ctx.lineTo(x+10, BAR_Y+8); ctx.stroke();
+  }
+
+  ctx.strokeStyle = isDark ? '#9E7B5A' : '#7B5E3A';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(anchor1, BAR_Y); ctx.lineTo(bx1, by1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(anchor2, BAR_Y); ctx.lineTo(bx2, by2); ctx.stroke();
+
+  const borderCol = isDark ? '#555' : '#aaa';
+  ctx.fillStyle = borderCol;
+  ctx.beginPath(); ctx.arc(anchor1, BAR_Y, 5, 0, 2*Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.arc(anchor2, BAR_Y, 5, 0, 2*Math.PI); ctx.fill();
+
+  function drawBalloon(bx, by) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(bx, by, BALLOON_R, 0, 2*Math.PI);
+    ctx.fillStyle = '#FF6B6B';
+    ctx.fill();
+    ctx.strokeStyle = '#FF4444';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(bx - BALLOON_R*0.3, by - BALLOON_R*0.3, BALLOON_R*0.3, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(bx-4, by+BALLOON_R);
+    ctx.lineTo(bx+4, by+BALLOON_R);
+    ctx.lineTo(bx+2, by+BALLOON_R+6);
+    ctx.lineTo(bx-2, by+BALLOON_R+6);
+    ctx.fillStyle = '#FF4444';
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('+', bx, by);
+    ctx.restore();
+  }
+
+  drawBalloon(bx1, by1);
+  drawBalloon(bx2, by2);
+}
+
+computeEquilibrium();
+draw();
+</script>
+</div>
