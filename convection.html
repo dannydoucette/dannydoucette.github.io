@@ -34,7 +34,7 @@ function initParticles() {
   particles = [];
   barrierOpen = false;
   for (let i = 0; i < N_WATER; i++) {
-    let speed = 2 + Math.random() * 3;
+    let speed = 4 + Math.random() * 1;
     let angle = Math.random() * Math.PI * 2;
     particles.push({
       x: R + Math.random() * (W - 2*R),
