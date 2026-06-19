@@ -1,0 +1,184 @@
+
+<style>
+  #sim-wrap { width: 400px; margin: 0 auto; font-family: var(--font-sans); }
+  #canvas { display: block; border: 1px solid #ccc; background: white; }
+  #bottom-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+  #btn { padding: 8px 28px; border: none; border-radius: 20px; font-size: 15px; font-weight: 500; cursor: pointer; color: white; background: #28a745; }
+  #btn.reset { background: #dc3545; }
+  #attribution { font-size: 11px; color: #888; padding-left: 2px; }
+</style>
+
+<div id="sim-wrap">
+  <canvas id="canvas" width="400" height="300"></canvas>
+  <div id="bottom-bar">
+    <div id="attribution">Danny Doucette &nbsp;|&nbsp; thinkib.net/physics</div>
+    <button id="btn">▶ Play</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const btn = document.getElementById('btn');
+const W = 400, H = 300;
+const BARRIER_Y = H / 2;
+const BAR_H = 4;
+const TOP_WALL = BARRIER_Y - BAR_H / 2;
+const BOT_WALL = BARRIER_Y + BAR_H / 2;
+const N_WATER = 100, N_AIR = 75;
+const R = 3;
+const GRAVITY = 0.12;
+let particles = [], animId = null, running = false, barrierOpen = false;
+
+function initParticles() {
+  particles = [];
+  barrierOpen = false;
+  for (let i = 0; i < N_WATER; i++) {
+    let speed = 2 + Math.random() * 3;
+    let angle = Math.random() * Math.PI * 2;
+    particles.push({
+      x: R + Math.random() * (W - 2*R),
+      y: BOT_WALL + R + Math.random() * (H - BOT_WALL - 2*R),
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      r: R, type: 'water', side: 'bottom'
+    });
+  }
+  for (let i = 0; i < N_AIR; i++) {
+    let speed = 0.5 + Math.random() * 1;
+    let angle = Math.random() * Math.PI * 2;
+    particles.push({
+      x: R + Math.random() * (W - 2*R),
+      y: R + Math.random() * (TOP_WALL - 2*R),
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      r: R, type: 'air', side: 'top'
+    });
+  }
+}
+
+function enforceBarrier(p) {
+  if (barrierOpen) return;
+  if (p.side === 'top') {
+    if (p.y + p.r > TOP_WALL) {
+      p.y = TOP_WALL - p.r;
+      if (p.vy > 0) p.vy = -p.vy;
+    }
+  } else {
+    if (p.y - p.r < BOT_WALL) {
+      p.y = BOT_WALL + p.r;
+      if (p.vy < 0) p.vy = -p.vy;
+    }
+  }
+}
+
+function drawFrame() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+
+  for (let p of particles) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    if (p.type === 'water') {
+      let speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+      let hot = Math.min(1, speed / 8);
+      let r = Math.round(30 + hot * 100);
+      let g = Math.round(100 + hot * 50);
+      ctx.fillStyle = `rgb(${r},${g},220)`;
+      ctx.strokeStyle = '#1a6eb0';
+    } else {
+      ctx.fillStyle = '#aaaaaa';
+      ctx.strokeStyle = '#888';
+    }
+    ctx.fill();
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  if (!barrierOpen) {
+    ctx.fillStyle = '#444';
+    ctx.fillRect(0, TOP_WALL, W, BAR_H);
+  }
+}
+
+function step() {
+  for (let p of particles) {
+    if (p.type === 'water') p.vy += GRAVITY;
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x - p.r < 0) { p.x = p.r; p.vx = Math.abs(p.vx); }
+    if (p.x + p.r > W) { p.x = W - p.r; p.vx = -Math.abs(p.vx); }
+    if (p.y - p.r < 0) { p.y = p.r; p.vy = Math.abs(p.vy); }
+    if (p.y + p.r > H) { p.y = H - p.r; p.vy = -Math.abs(p.vy); }
+    enforceBarrier(p);
+  }
+
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i+1; j < particles.length; j++) {
+      let a = particles[i], b = particles[j];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let dist = Math.sqrt(dx*dx + dy*dy);
+      let minD = a.r + b.r;
+      if (dist < minD && dist > 0.001) {
+        let nx = dx/dist, ny = dy/dist;
+        let overlap = minD - dist;
+        a.x -= nx * overlap/2;
+        a.y -= ny * overlap/2;
+        b.x += nx * overlap/2;
+        b.y += ny * overlap/2;
+        enforceBarrier(a);
+        enforceBarrier(b);
+        let dvx = b.vx - a.vx, dvy = b.vy - a.vy;
+        let dot = dvx*nx + dvy*ny;
+        if (dot < 0) {
+          a.vx += dot * nx;
+          a.vy += dot * ny;
+          b.vx -= dot * nx;
+          b.vy -= dot * ny;
+        }
+      }
+    }
+  }
+}
+
+function loop() {
+  step();
+  drawFrame();
+  animId = requestAnimationFrame(loop);
+}
+
+function reset() {
+  if (animId) cancelAnimationFrame(animId);
+  animId = null;
+  running = false;
+  btn.textContent = '▶ Play';
+  btn.classList.remove('reset');
+  initParticles();
+  drawFrame();
+  animId = requestAnimationFrame(previewLoop);
+}
+
+btn.addEventListener('click', () => {
+  if (!running) {
+    running = true;
+    barrierOpen = true;
+    btn.textContent = '■ Reset';
+    btn.classList.add('reset');
+    if (animId) cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(loop);
+  } else {
+    reset();
+  }
+});
+
+initParticles();
+
+function previewLoop() {
+  if (running) return;
+  step();
+  drawFrame();
+  animId = requestAnimationFrame(previewLoop);
+}
+animId = requestAnimationFrame(previewLoop);
+</script>
