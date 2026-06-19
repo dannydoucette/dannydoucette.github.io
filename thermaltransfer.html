@@ -1,0 +1,301 @@
+
+<div style="width:800px;height:600px;background:#fff;position:relative;overflow:hidden;font-family:'Anthropic Sans',sans-serif;">
+
+<canvas id="sim" width="800" height="600" style="position:absolute;top:0;left:0;"></canvas>
+
+<div style="position:absolute;left:14px;top:80px;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:10;">
+  <span style="font-size:11px;color:#444;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:1px;">TEMPERATURE</span>
+  <input type="range" id="tempSlider" min="20" max="4000" value="400" step="1"
+    style="writing-mode:vertical-lr;direction:rtl;height:340px;width:28px;cursor:pointer;accent-color:#e05c2a;">
+  <span id="tempLabel" style="font-size:13px;font-weight:500;color:#222;">400°C</span>
+</div>
+
+<div style="position:absolute;right:14px;top:14px;background:rgba(255,255,255,0.92);border:1px solid #ddd;border-radius:8px;padding:12px 16px;min-width:190px;z-index:10;">
+  <div style="font-size:12px;font-weight:500;color:#333;margin-bottom:8px;letter-spacing:.5px;">HEAT TRANSFER RATES</div>
+  <div style="margin-bottom:6px;">
+    <span style="font-size:11px;color:#555;">Conduction</span>
+    <div id="condBar" style="height:6px;border-radius:3px;background:#222;margin:2px 0;transition:width .3s;"></div>
+    <span id="condVal" style="font-size:13px;font-weight:500;color:#111;"></span>
+  </div>
+  <div style="margin-bottom:6px;">
+    <span style="font-size:11px;color:#1a5fa8;">Convection</span>
+    <div id="convBar" style="height:6px;border-radius:3px;background:#1a5fa8;margin:2px 0;transition:width .3s;"></div>
+    <span id="convVal" style="font-size:13px;font-weight:500;color:#1a5fa8;"></span>
+  </div>
+  <div style="margin-bottom:2px;">
+    <span style="font-size:11px;color:#b08000;">Radiation</span>
+    <div id="radBar" style="height:6px;border-radius:3px;background:#c8a000;margin:2px 0;transition:width .3s;"></div>
+    <span id="radVal" style="font-size:13px;font-weight:500;color:#9a7800;"></span>
+  </div>
+  <div style="margin-top:10px;border-top:1px solid #eee;padding-top:8px;">
+    <span style="font-size:11px;color:#555;">Total</span><br>
+    <span id="totalVal" style="font-size:14px;font-weight:500;color:#111;"></span>
+  </div>
+</div>
+
+<div style="position:absolute;bottom:10px;left:14px;z-index:10;">
+  <div style="font-size:11px;color:#444;font-weight:500;">Danny Doucette</div>
+  <div style="font-size:11px;color:#666;">thinkib.net/physics</div>
+</div>
+
+<script>
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+
+let T = 400;
+let animFrame = 0;
+
+function nailColor(t){
+  if(t<200) return '#b0b0b0';
+  if(t<350) return '#cc6633';
+  if(t<500) return '#e87020';
+  if(t<650) return '#f0a020';
+  if(t<800) return '#ffe040';
+  if(t<1500) return '#ffffaa';
+  return '#ffffff';
+}
+
+function calcPowers(T){
+  const Tw = 25;
+  const Tk = T + 273.15;
+  const Twk = Tw + 273.15;
+  const dt = T - Tw;
+  const A = Math.PI * 0.004 * 0.05 + 2*Math.PI*(0.002**2);
+  const k = 0.6, d = 0.0005;
+  const Pcond = k * A * dt / d;
+  const h = 1000;
+  const Pconv = h * A * dt;
+  const sigma = 5.67e-8, eps = 0.8;
+  const Prad = eps * sigma * A * (Math.pow(Tk,4) - Math.pow(Twk,4));
+  return {
+    cond: Math.max(0, Pcond),
+    conv: Math.max(0, Pconv),
+    rad: Math.max(0, Prad),
+    total: Math.max(0, Pcond + Pconv + Math.max(0, Prad))
+  };
+}
+
+function fmt(w){
+  if(w<1) return (w*1000).toFixed(1)+' mW';
+  if(w<1000) return w.toFixed(1)+' W';
+  return (w/1000).toFixed(2)+' kW';
+}
+
+// Draw arrowhead with BASE at (bx,by) pointing toward direction (dx,dy)
+// The base of the triangle sits at the end of the line
+function drawArrowHead(bx, by, angleDeg, size, color){
+  const ang = angleDeg * Math.PI / 180;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  // tip is further out from base
+  const tipX = bx + size * Math.cos(ang);
+  const tipY = by + size * Math.sin(ang);
+  // base corners are perpendicular to direction at (bx,by)
+  const perpAng = ang + Math.PI/2;
+  const half = size * 0.45;
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(bx + half*Math.cos(perpAng), by + half*Math.sin(perpAng));
+  ctx.lineTo(bx - half*Math.cos(perpAng), by - half*Math.sin(perpAng));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawNail(cx, cy, t){
+  const headW=32, headH=14, shankW=7, shankH=90, pointH=22;
+  const color = nailColor(t);
+
+  // Shank
+  const sg = ctx.createLinearGradient(cx-shankW/2,0,cx+shankW/2,0);
+  sg.addColorStop(0,'#888');
+  sg.addColorStop(0.3,color);
+  sg.addColorStop(0.7,color);
+  sg.addColorStop(1,'#555');
+  ctx.fillStyle=sg;
+  ctx.fillRect(cx-shankW/2, cy-headH/2, shankW, shankH);
+
+  // Head
+  const hg = ctx.createLinearGradient(cx-headW/2,0,cx+headW/2,0);
+  hg.addColorStop(0,'#777');
+  hg.addColorStop(0.5,color);
+  hg.addColorStop(1,'#555');
+  ctx.fillStyle=hg;
+  ctx.beginPath();
+  ctx.roundRect(cx-headW/2, cy-headH, headW, headH, 3);
+  ctx.fill();
+  ctx.strokeStyle='#555';
+  ctx.lineWidth=0.7;
+  ctx.stroke();
+
+  // Point
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(cx-shankW/2, cy-headH/2+shankH);
+  ctx.lineTo(cx+shankW/2, cy-headH/2+shankH);
+  ctx.lineTo(cx, cy-headH/2+shankH+pointH);
+  ctx.closePath();
+  ctx.fill();
+
+  if(t>300){
+    ctx.fillStyle='rgba(255,255,200,0.3)';
+    ctx.fillRect(cx-2, cy-headH/2+5, 2, shankH-10);
+  }
+}
+
+function drawWater(){
+  ctx.fillStyle='rgba(100,180,220,0.25)';
+  ctx.fillRect(70, 110, 660, 440);
+  ctx.strokeStyle='rgba(100,180,255,0.5)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let x=70;x<=730;x+=3){
+    const y = 110 + Math.sin((x+animFrame*0.5)*0.08)*2;
+    x===70?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.strokeStyle='rgba(80,140,200,0.4)';
+  ctx.lineWidth=2;
+  ctx.strokeRect(70,110,660,440);
+}
+
+function drawConduction(cx, cy, powers, maxP){
+  const w = 1 + (powers.cond/maxP)*7;
+  if(powers.cond<0.001) return;
+  ctx.strokeStyle='#111';
+  ctx.lineWidth=w;
+  ctx.lineCap='round';
+
+  const dirs=[
+    {x1:cx, y1:cy-55, x2:cx, y2:cy-150, angle:-90},
+    {x1:cx, y1:cy+80, x2:cx, y2:cy+160, angle:90},
+    {x1:cx-28, y1:cy+20, x2:cx-120, y2:cy+20, angle:180},
+    {x1:cx+28, y1:cy+20, x2:cx+120, y2:cy+20, angle:0},
+  ];
+  const sz = 8 + w*1.2;
+  dirs.forEach(({x1,y1,x2,y2,angle})=>{
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
+    // base of arrowhead at (x2,y2), pointing outward
+    drawArrowHead(x2, y2, angle, sz, '#111');
+  });
+
+  ctx.fillStyle='#111';
+  ctx.font='bold 11px sans-serif';
+  ctx.fillText('Conduction', cx+62, cy-100);
+}
+
+function drawConvection(cx, cy, powers, maxP){
+  const w = 1 + (powers.conv/maxP)*5;
+  if(powers.conv<0.001) return;
+
+  // Single circular arc
+  const r = 105;
+  const color = 'rgba(26,95,168,0.85)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+
+  // Arc from bottom-right, going counter-clockwise (almost full circle)
+  const startAngle = Math.PI*0.25;
+  const endAngle = Math.PI*0.2;  // just short of full circle
+  ctx.beginPath();
+  ctx.arc(cx, cy+10, r, startAngle, endAngle, false);
+  ctx.stroke();
+
+  // Arrowhead: base at the end of arc, pointing along tangent (CCW)
+  const endA = endAngle;
+  const bx = cx + r*Math.cos(endA);
+  const by = cy+10 + r*Math.sin(endA);
+  // tangent for CCW arc at endA: direction is (-sin(endA), cos(endA))
+  const tangAngle = Math.atan2(Math.cos(endA), -Math.sin(endA)) * 180/Math.PI;
+  drawArrowHead(bx, by, tangAngle, 8+w, color);
+
+  ctx.fillStyle='#1a5fa8';
+  ctx.font='bold 11px sans-serif';
+  ctx.fillText('Convection', cx-185, cy-55);
+}
+
+function drawRadiation(cx, cy, powers, maxP, t){
+  const w = 0.5 + (powers.rad/maxP)*5;
+  if(powers.rad<0.001) return;
+  const color = t>600?'#d4a000':'#c08800';
+
+  // Fixed angles, no rotation
+  const angles = [0, 60, 120, 180, 240, 300].map(a=>a*Math.PI/180);
+  const startR = 42, endR = 115 + w*6;
+  const waveAmp = 4*(w*0.4+0.6);
+
+  angles.forEach(ang=>{
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(0.8, w*0.7);
+    ctx.lineCap='round';
+    ctx.beginPath();
+    const steps=24;
+    const perpX=-Math.sin(ang), perpY=Math.cos(ang);
+    for(let s=0;s<=steps;s++){
+      const frac=s/steps;
+      const r=startR+frac*(endR-startR);
+      const wave=Math.sin(frac*Math.PI*5)*waveAmp;
+      const x=cx+Math.cos(ang)*r + perpX*wave;
+      const y=cy+Math.sin(ang)*r + perpY*wave;
+      s===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // Arrowhead base at tip of line (endR along ang), pointing outward
+    const ex=cx+Math.cos(ang)*endR, ey=cy+Math.sin(ang)*endR;
+    const angleDeg = ang * 180/Math.PI;
+    drawArrowHead(ex, ey, angleDeg, 7+w, color);
+  });
+
+  ctx.fillStyle='#a07800';
+  ctx.font='bold 11px sans-serif';
+  ctx.fillText('Radiation', cx+80, cy+100);
+}
+
+function updateReadout(p){
+  const maxP = Math.max(p.total, 1);
+  const barMax = 158;
+  document.getElementById('condVal').textContent = fmt(p.cond);
+  document.getElementById('convVal').textContent = fmt(p.conv);
+  document.getElementById('radVal').textContent = fmt(Math.max(0,p.rad));
+  document.getElementById('totalVal').textContent = fmt(p.total);
+  document.getElementById('condBar').style.width = Math.max(4,(p.cond/maxP*barMax))+'px';
+  document.getElementById('convBar').style.width = Math.max(4,(p.conv/maxP*barMax))+'px';
+  document.getElementById('radBar').style.width = Math.max(4,(Math.max(0,p.rad)/maxP*barMax))+'px';
+}
+
+function draw(){
+  ctx.clearRect(0,0,800,600);
+  animFrame++;
+
+  const cx=400, cy=290;
+  const p = calcPowers(T);
+  const maxP = Math.max(p.total, 0.01);
+
+  ctx.fillStyle='#fff';
+  ctx.fillRect(0,0,800,600);
+
+  drawWater();
+  drawConduction(cx,cy,p,maxP);
+  drawConvection(cx,cy,p,maxP);
+  drawRadiation(cx,cy,p,maxP,T);
+  drawNail(cx,cy,T);
+
+  ctx.fillStyle='rgba(60,120,170,0.6)';
+  ctx.font='13px sans-serif';
+  ctx.fillText('Water (25°C)', 88, 135);
+
+  updateReadout(p);
+  requestAnimationFrame(draw);
+}
+
+document.getElementById('tempSlider').addEventListener('input',function(){
+  T = parseInt(this.value);
+  document.getElementById('tempLabel').textContent = T+'°C';
+});
+
+draw();
+</script>
+</div>
