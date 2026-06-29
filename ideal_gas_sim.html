@@ -334,6 +334,7 @@ function updateReadouts(){
   const {w,h}=box(),V=w*h*PX_M*PX_M;
   document.getElementById('rd-temp').textContent=T.toFixed(1)+' K';
   document.getElementById('rd-energy').textContent=(1.5*N*k_B*T).toExponential(3)+' J';
+  document.getElementById('rd-density').textContent=(1.5*N*k_B*T).toExponential(3)+' xyz';  
   document.getElementById('rd-pressure').textContent=(N*k_B*T/V).toExponential(3)+' Pa';
   document.getElementById('rd-vol').textContent=(w*h/(canvas.width*canvas.height)).toFixed(2);
   document.getElementById('rd-speed').textContent=Math.sqrt(vSq).toFixed(0);
