@@ -6,10 +6,10 @@
   <title>Ideal Gas Simulation</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Arial', system-ui, sans-serif; background: #ffffff; color: #000000; height: 100vh; display: flex; flex-direction: column; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1d23; color: #e0e4ef; height: 100vh; display: flex; flex-direction: column; }
     #topbar { background: #12151a; border-bottom: 1px solid #2e3340; padding: 10px 18px; display: flex; align-items: center; gap: 12px; }
-    #topbar h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: 0.03em; color: #000000; }
-    #topbar .sub { font-size: 0.7rem; color: #000000; margin-top: 1px; }
+    #topbar h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: 0.03em; color: #a8c4f0; }
+    #topbar .sub { font-size: 0.7rem; color: #4a5270; margin-top: 1px; }
     #main { display: flex; flex: 1; overflow: hidden; }
     #canvas-area { flex: 1; display: flex; flex-direction: column; padding: 14px 0 14px 14px; }
     #zoom-controls { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
@@ -86,7 +86,7 @@
       <button onclick="resetSim()">&#x21ba; Reset</button>
     </div>
 
-    <div class="ptitle">Parameters</div>
+    <div class="ptitle">Container &amp; Particles</div>
     <div class="ctrl">
       <div class="clabel"><span>Particles (N)</span><span class="readout" id="rd-n">50</span></div>
       <input type="range" id="sl-n" min="1" max="200" value="50" oninput="onNChange(this.value)">
@@ -94,11 +94,13 @@
     <div class="ctrl">
       <div class="clabel"><span>Volume (rel.)</span><span class="readout" id="rd-vol">1.00</span></div>
       <input type="range" id="sl-vol" min="20" max="100" value="60" oninput="onVolChange(this.value)">
+    </div>
+
+    <div class="ptitle">Thermodynamics</div>
     <div class="ctrl">
       <div class="clabel"><span>Avg. Speed (px/s)</span><span class="readout" id="rd-speed">150</span></div>
       <input type="range" id="sl-speed" min="20" max="400" value="150" oninput="onSpeedChange(this.value)">
     </div>
-    <div class="rrow"><span>Density (kg/m³)</span><span class="readout" id="rd-density">&#x2014;</span></div>
     <div class="rrow"><span>Temperature (K)</span><span class="readout" id="rd-temp">&#x2014;</span></div>
     <div class="rrow"><span>Internal Energy (J)</span><span class="readout" id="rd-energy">&#x2014;</span></div>
     <div class="rrow"><span>Pressure (Pa)</span><span class="readout" id="rd-pressure">&#x2014;</span></div>
@@ -330,10 +332,9 @@ function updateReadouts(){
   const T=m_p*vSq*PX_M*PX_M/(3*k_B);
   const {w,h}=box(),V=w*h*PX_M*PX_M;
   document.getElementById('rd-temp').textContent=T.toFixed(1)+' K';
-  document.getElementById('rd-density').textContent=(N*m_p/V).toExponential(3)+' kg/m³';  
   document.getElementById('rd-energy').textContent=(1.5*N*k_B*T).toExponential(3)+' J';
   document.getElementById('rd-pressure').textContent=(N*k_B*T/V).toExponential(3)+' Pa';
-  document.getElementById('rd-vol').textContent=(w*h/(canvas.width*canvas.height)).toFixed(2)+' m³";
+  document.getElementById('rd-vol').textContent=(w*h/(canvas.width*canvas.height)).toFixed(2);
   document.getElementById('rd-speed').textContent=Math.sqrt(vSq).toFixed(0);
 }
 
