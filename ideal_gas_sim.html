@@ -330,7 +330,7 @@ function updateReadouts(){
   const T=m_p*vSq*PX_M*PX_M/(3*k_B);
   const {w,h}=box(),V=w*h*PX_M*PX_M;
   document.getElementById('rd-temp').textContent=T.toFixed(1)+' K';
-  document.getElementById('rd-density').textContent=(N*m_p/V)+' kg/m³';  
+  document.getElementById('rd-density').textContent=(N*m_p/V).toExponential(3)+' kg/m³';  
   document.getElementById('rd-energy').textContent=(1.5*N*k_B*T).toExponential(3)+' J';
   document.getElementById('rd-pressure').textContent=(N*k_B*T/V).toExponential(3)+' Pa';
   document.getElementById('rd-vol').textContent=(w*h/(canvas.width*canvas.height)).toFixed(2)+' m³";
