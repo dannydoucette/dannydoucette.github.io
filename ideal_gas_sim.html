@@ -404,7 +404,9 @@ function startRecording(){
   recordInterval=setInterval(()=>{
     // Snapshot: draw current frame onto a fresh same-size canvas
     const tmp=document.createElement('canvas');
-    tmp.width=canvas.width; tmp.height=canvas.height;
+    b=box();
+    tmp.width=b.x; tmp.height=b.y;
+    // tmp.width=canvas.width; tmp.height=canvas.height;
     tmp.getContext('2d').drawImage(canvas,0,0);
     recordFrames.push(tmp);
     count++;
