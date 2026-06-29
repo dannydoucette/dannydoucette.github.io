@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhysBox — 2D Physics Sandbox</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#fff; overflow:hidden; font-family:'Segoe UI',sans-serif; user-select:none; }
+  canvas { display:block; }
+  #toolbar {
+    position:fixed; top:0; left:0; right:0; height:50px;
+    background:rgba(248,248,252,0.97); border-bottom:1px solid #dde;
+    display:flex; align-items:center; gap:5px; padding:0 12px; z-index:10;
+    backdrop-filter:blur(6px);
+  }
+  .tb { background:#eeeef8; border:1px solid #ccd; color:#444; border-radius:6px;
+        padding:5px 10px; font-size:12px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+  .tb:hover { background:#ddddf5; }
+  .tb.on { background:#4c4ff0; border-color:#7577ff; color:#fff; }
+  .sep { width:1px; height:28px; background:#ccd; margin:0 3px; flex-shrink:0; }
+  .sg { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+  .sg label { color:#666; font-size:11px; white-space:nowrap; }
+  .sg input { width:62px; accent-color:#4c4ff0; }
+  .sg span { color:#333; font-size:11px; width:30px; }
+  #colorPick { width:28px; height:26px; border-radius:5px; border:1px solid #bbc; cursor:pointer; flex-shrink:0; }
+  #hint { position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+          background:rgba(0,0,0,0.1); color:#777; font-size:11px;
+          padding:3px 13px; border-radius:20px; pointer-events:none; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button class="tb on" id="btn-circle" onclick="setTool('circle')">⬤ Circle</button>
+  <button class="tb"    id="btn-box"    onclick="setTool('box')">▬ Box</button>
+  <button class="tb"    id="btn-poly"   onclick="setTool('poly')">✏ Poly</button>
+  <button class="tb"    id="btn-grab"   onclick="setTool('grab')">✋ Grab</button>
+  <div class="sep"></div>
+  <input type="color" id="colorPick" value="#5b9ef4">
+  <div class="sep"></div>
+  <div class="sg"><label>Gravity</label>
+    <input type="range" id="sGrav"   min="0" max="1.5" step="0.02" value="0.4">
+    <span id="vGrav">0.40</span></div>
+  <div class="sg"><label>Bounce</label>
+    <input type="range" id="sBounce" min="0" max="1"   step="0.01" value="0.55">
+    <span id="vBounce">0.55</span></div>
+  <div class="sg"><label>Friction</label>
+    <input type="range" id="sFric"   min="0" max="1"   step="0.01" value="0.18">
+    <span id="vFric">0.18</span></div>
+  <div class="sep"></div>
+  <button class="tb" onclick="togglePause()" id="btn-pause">⏸ Pause</button>
+  <button class="tb" onclick="clearScene()">🗑 Clear</button>
+  <button class="tb" onclick="addFloor()">⬛ Floor</button>
+  <button class="tb" onclick="spawnBurst()">💥 Burst</button>
+</div>
+<canvas id="c"></canvas>
+<div id="hint">Circle/Box: drag to draw · Poly: click points, right-click or double-click to finish · Grab: drag to throw</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  PhysBox — clean unified polygon physics
+//  All shapes are convex polygons in local space.
+//  SAT for all shape-vs-shape, including floor/walls.
+// ═══════════════════════════════════════════════════════
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H;
+const TB = 50;
+function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+
+// ── Globals ───────────────────────────────────────────
+let GRAVITY=0.4, RESTITUTION=0.55, FRICTION=0.18;
+function bindSlider(id, di, fn){
+  const el=document.getElementById(id), d=document.getElementById(di);
+  el.addEventListener('input',()=>{ const v=parseFloat(el.value); fn(v); d.textContent=v.toFixed(2); });
+}
+bindSlider('sGrav',  'vGrav',   v=>GRAVITY=v);
+bindSlider('sBounce','vBounce', v=>RESTITUTION=v);
+bindSlider('sFric',  'vFric',   v=>FRICTION=v);
+
+// ── Math ──────────────────────────────────────────────
+const v2     = (x,y)=>({x,y});
+const vadd   = (a,b)=>v2(a.x+b.x,a.y+b.y);
+const vsub   = (a,b)=>v2(a.x-b.x,a.y-b.y);
+const vscale = (a,s)=>v2(a.x*s,a.y*s);
+const vdot   = (a,b)=>a.x*b.x+a.y*b.y;
+const vcross = (a,b)=>a.x*b.y-a.y*b.x;
+const vlen   = a=>Math.sqrt(a.x*a.x+a.y*a.y);
+const vnorm  = a=>{ const l=vlen(a)||1; return v2(a.x/l,a.y/l); };
+const vperp  = a=>v2(-a.y,a.x);
+const vrot   = (v,c,s)=>v2(v.x*c-v.y*s,v.x*s+v.y*c);
+
+function makeNgon(r,n){
+  const v=[];
+  for(let i=0;i<n;i++) v.push(v2(r*Math.cos(2*Math.PI*i/n),r*Math.sin(2*Math.PI*i/n)));
+  return v;
+}
+function makeBox(w,h){
+  return [v2(-w/2,-h/2),v2(w/2,-h/2),v2(w/2,h/2),v2(-w/2,h/2)];
+}
+function polyArea(vs){
+  let a=0;
+  for(let i=0;i<vs.length;i++){const j=(i+1)%vs.length;a+=vs[i].x*vs[j].y-vs[j].x*vs[i].y;}
+  return Math.abs(a)/2;
+}
+// Remove duplicate/near-duplicate vertices and zero-length edges
+function cleanVerts(vs){
+  const out=[];
+  for(let i=0;i<vs.length;i++){
+    const v=vs[i];
+    if(out.length>0){
+      const prev=out[out.length-1];
+      if(Math.abs(v.x-prev.x)<0.5&&Math.abs(v.y-prev.y)<0.5) continue;
+    }
+    out.push(v);
+  }
+  return out;
+}
+
+// ── Body ──────────────────────────────────────────────
+let uid=0;
+class Body {
+  constructor(x,y,type,opts={}){
+    this.id=uid++;
+    this.x=x; this.y=y;
+    this.vx=opts.vx||0; this.vy=opts.vy||0;
+    this.angle=0; this.av=0;
+    this.type=type;
+    this.color=opts.color||'#5b9ef4';
+    this.fixed=!!opts.fixed;
+    // Shape params kept for drawing
+    this.r=opts.r||25;
+    this.w=opts.w||50;
+    this.h=opts.h||50;
+    this.isCircle=(type==='circle');
+
+    // Local-space vertices
+    if(type==='circle')      this.lv=makeNgon(this.r,24);
+    else if(type==='box')    this.lv=makeBox(this.w,this.h);
+    else                     this.lv=cleanVerts(opts.verts||[]);
+
+    const area=polyArea(this.lv)||100;
+    if(this.fixed){
+      this.mass=Infinity; this.invMass=0;
+      this.inertia=Infinity; this.invInertia=0;
+    } else {
+      this.mass=Math.max(0.3,area/1000);
+      this.invMass=1/this.mass;
+      // Moment of inertia: sum of triangles from centroid
+      this.inertia=this._calcInertia();
+      this.invInertia=1/this.inertia;
+    }
+  }
+
+  _calcInertia(){
+    // Polygon moment of inertia about centroid
+    const vs=this.lv, n=vs.length;
+    let num=0, den=0;
+    for(let i=0;i<n;i++){
+      const a=vs[i], b=vs[(i+1)%n];
+      const c=Math.abs(vcross(a,b));
+      num+=c*(vdot(a,a)+vdot(a,b)+vdot(b,b));
+      den+=c;
+    }
+    return (this.mass/6)*(num/(den||1));
+  }
+
+  worldVerts(){
+    const c=Math.cos(this.angle),s=Math.sin(this.angle);
+    return this.lv.map(v=>vadd(v2(this.x,this.y),vrot(v,c,s)));
+  }
+
+  get aabb(){
+    const wv=this.worldVerts();
+    let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+    for(const v of wv){x1=Math.min(x1,v.x);y1=Math.min(y1,v.y);x2=Math.max(x2,v.x);y2=Math.max(y2,v.y);}
+    return {x1,y1,x2,y2};
+  }
+
+  draw(){
+    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+    ctx.fillStyle=this.color;
+    ctx.strokeStyle=this.fixed?'rgba(0,0,0,0.15)':'rgba(0,0,0,0.3)';
+    ctx.lineWidth=1.5;
+    if(this.isCircle){
+      ctx.beginPath(); ctx.arc(0,0,this.r,0,Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(this.r*0.75,0);
+      ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2; ctx.stroke();
+    } else {
+      ctx.beginPath();
+      this.lv.forEach((v,i)=>i===0?ctx.moveTo(v.x,v.y):ctx.lineTo(v.x,v.y));
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  update(){
+    if(this.fixed) return;
+    this.vy+=GRAVITY;
+    this.x+=this.vx; this.y+=this.vy;
+    this.angle+=this.av;
+    this.av*=0.995;
+    if(this.y>H+600) this._dead=true;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  SAT — two convex polygon lists
+//  Returns {normal(A→B), depth, cp} or null
+// ══════════════════════════════════════════════════════
+// Skin thickness: SAT fires when shapes are within SKIN px of each other.
+// This closes the gap where overlap=0 means "no collision" but gravity
+// immediately sinks the body 0.4px — causing the 1-frame oscillation jitter.
+const SKIN = 0.5;
+
+function projectOnto(verts,axis){
+  let mn=1e9,mx=-1e9;
+  for(const v of verts){ const p=vdot(v,axis); mn=Math.min(mn,p); mx=Math.max(mx,p); }
+  return [mn,mx];
+}
+
+function sat(va,vb){
+  let minD=1e9, bestN=null;
+
+  // Test axes from edges of one polygon
+  function testAxes(verts){
+    for(let i=0;i<verts.length;i++){
+      const j=(i+1)%verts.length;
+      const edge=vsub(verts[j],verts[i]);
+      const l=vlen(edge);
+      if(l<0.01) continue; // skip degenerate edges
+      const axis=v2(-edge.y/l,edge.x/l); // unit normal
+      const [mnA,mxA]=projectOnto(va,axis);
+      const [mnB,mxB]=projectOnto(vb,axis);
+      const overlap=Math.min(mxA,mxB)-Math.max(mnA,mnB);
+      if(overlap<-SKIN) return false; // separating axis
+      if(overlap<minD){ minD=overlap; bestN={...axis}; }
+    }
+    return true;
+  }
+
+  if(!testAxes(va)) return null;
+  if(!testAxes(vb)) return null;
+
+  // Flip normal to point from A toward B
+  const cA=centroid(va), cB=centroid(vb);
+  if(vdot(vsub(cB,cA),bestN)<0){ bestN.x=-bestN.x; bestN.y=-bestN.y; }
+
+  // Contact point: vertex of B most penetrating into A
+  // = vertex of B with MINIMUM dot product along normal (deepest "behind" normal)
+  let cp=vb[0], bestP=1e9;
+  for(const v of vb){ const p=vdot(v,bestN); if(p<bestP){ bestP=p; cp=v; } }
+
+  return {n:bestN, d:minD, cp};
+}
+
+function centroid(vs){
+  let x=0,y=0; for(const v of vs){x+=v.x;y+=v.y;} return v2(x/vs.length,y/vs.length);
+}
+
+// ══════════════════════════════════════════════════════
+//  Impulse resolver
+// ══════════════════════════════════════════════════════
+function resolve(a,b,n,d,cp,doCorrection){
+  const totalInvM=a.invMass+b.invMass;
+  if(totalInvM<1e-10) return;
+
+  // Full positional projection — push objects completely out of each other.
+  // Done every iteration so objects don't sink. No slop/fraction; sinking is
+  // the root cause of floor vibration with Baumgarte-style partial correction.
+  if(doCorrection && d>0){
+    const corr=d/totalInvM;
+    if(!a.fixed){ a.x-=n.x*corr*a.invMass; a.y-=n.y*corr*a.invMass; }
+    if(!b.fixed){ b.x+=n.x*corr*b.invMass; b.y+=n.y*corr*b.invMass; }
+  }
+
+  // Velocity at contact point (including angular contribution)
+  const rA=vsub(cp,v2(a.x,a.y)), rB=vsub(cp,v2(b.x,b.y));
+  const vA=v2(a.vx-a.av*rA.y, a.vy+a.av*rA.x);
+  const vB=v2(b.vx-b.av*rB.y, b.vy+b.av*rB.x);
+  const relV=vsub(vB,vA);
+  const relVN=vdot(relV,n);
+  if(relVN>0) return; // already separating
+
+  const rACN=vcross(rA,n), rBCN=vcross(rB,n);
+  const denom=totalInvM+rACN*rACN*a.invInertia+rBCN*rBCN*b.invInertia;
+  if(denom<1e-10) return;
+
+  // Restitution threshold: slow impacts are inelastic so objects settle
+  const REST_THRESH = 3.0 * GRAVITY;
+  const approaching = -relVN;
+  const e = (approaching > REST_THRESH) ? RESTITUTION : 0;
+  const j = -(1+e)*relVN/denom;
+  if(!a.fixed){ a.vx-=j*a.invMass*n.x; a.vy-=j*a.invMass*n.y; a.av-=j*a.invInertia*rACN; }
+  if(!b.fixed){ b.vx+=j*b.invMass*n.x; b.vy+=j*b.invMass*n.y; b.av+=j*b.invInertia*rBCN; }
+
+
+
+  // Friction (tangential impulse, Coulomb-clamped)
+  const t=vnorm(vsub(relV,vscale(n,vdot(relV,n))));
+  const relVT=vdot(relV,t);
+  if(Math.abs(relVT)<0.001) return;
+  const rACT=vcross(rA,t), rBCT=vcross(rB,t);
+  const denomT=totalInvM+rACT*rACT*a.invInertia+rBCT*rBCT*b.invInertia;
+  if(denomT<1e-10) return;
+  let jt=-relVT/denomT;
+  jt=Math.max(-FRICTION*Math.abs(j), Math.min(FRICTION*Math.abs(j), jt));
+  if(!a.fixed){ a.vx-=jt*a.invMass*t.x; a.vy-=jt*a.invMass*t.y; a.av-=jt*a.invInertia*rACT; }
+  if(!b.fixed){ b.vx+=jt*b.invMass*t.x; b.vy+=jt*b.invMass*t.y; b.av+=jt*b.invInertia*rBCT; }
+}
+
+function collideAll(doCorrection){
+  for(let i=0;i<bodies.length;i++){
+    for(let j=i+1;j<bodies.length;j++){
+      const a=bodies[i],b=bodies[j];
+      if(a.fixed&&b.fixed) continue;
+      const ba=a.aabb,bb=b.aabb;
+      if(ba.x2<bb.x1||bb.x2<ba.x1||ba.y2<bb.y1||bb.y2<ba.y1) continue;
+      const r=sat(a.worldVerts(),b.worldVerts());
+      if(r) resolve(a,b,r.n,r.d,r.cp,doCorrection);
+    }
+  }
+}
+
+// ── Scene ─────────────────────────────────────────────
+let bodies=[], paused=false, tool='circle';
+
+function setTool(t){
+  tool=t; polyPts=[]; polyOn=false;
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('btn-'+t)?.classList.add('on');
+  canvas.style.cursor=t==='grab'?'grab':'crosshair';
+}
+const getColor=()=>document.getElementById('colorPick').value;
+
+function addFloor(){
+  // Intentionally empty — boundaries are enforced by bounceWalls() directly,
+  // which avoids SAT oscillation against static geometry.
+}
+
+// Direct boundary enforcement: clamp deepest-penetrating vertex, reflect velocity.
+// One correction per boundary per body per frame — no oscillation.
+function bounceWalls(){
+  for(const b of bodies){
+    if(b.fixed) continue;
+    const e=RESTITUTION, fr=FRICTION;
+    const verts=b.worldVerts();
+
+    // Find deepest vertex past each boundary, correct once
+    // Floor
+    let maxPenY=0, floorVert=null;
+    for(const v of verts) if(v.y-H>maxPenY){ maxPenY=v.y-H; floorVert=v; }
+    if(floorVert){
+      b.y-=maxPenY;
+      if(b.vy>0){
+        b.vy = b.vy<2 ? 0 : -b.vy*e;
+        b.vx*=(1-fr);
+        b.av*=(1-fr);
+      }
+      // Steer non-circle shapes toward nearest stable resting angle.
+      // For a box: multiples of PI/2. For a poly: we just pull toward 0.
+      // We do this by adding a small torque proportional to angular error.
+      if(!b.isCircle && Math.abs(b.vy)<4){
+        const step = b.type==='box' ? Math.PI/2 : Math.PI*2;
+        const nearest = Math.round(b.angle/step)*step;
+        const err = b.angle - nearest;
+        b.av -= err * 0.08;   // spring torque toward flat
+        b.av *= 0.85;          // strong damping so it doesn't oscillate
+      }
+    }
+
+    // Ceiling
+    let maxPenCeil=0;
+    for(const v of verts) if(TB-v.y>maxPenCeil) maxPenCeil=TB-v.y;
+    if(maxPenCeil>0){
+      b.y+=maxPenCeil;
+      if(b.vy<0) b.vy=-b.vy*e;
+    }
+
+    // Left wall
+    let maxPenL=0;
+    for(const v of verts) if(-v.x>maxPenL) maxPenL=-v.x;
+    if(maxPenL>0){
+      b.x+=maxPenL;
+      if(b.vx<0){
+        b.vx = Math.abs(b.vx)<2 ? 0 : -b.vx*e;
+        b.vy*=(1-fr);
+        b.av*=(1-fr);
+      }
+    }
+
+    // Right wall
+    let maxPenR=0;
+    for(const v of verts) if(v.x-W>maxPenR) maxPenR=v.x-W;
+    if(maxPenR>0){
+      b.x-=maxPenR;
+      if(b.vx>0){
+        b.vx = Math.abs(b.vx)<2 ? 0 : -b.vx*e;
+        b.vy*=(1-fr);
+        b.av*=(1-fr);
+      }
+    }
+  }
+}
+
+function clearScene(){ bodies=[]; addFloor(); }
+function togglePause(){ paused=!paused; document.getElementById('btn-pause').textContent=paused?'▶ Play':'⏸ Pause'; }
+
+function spawnBurst(){
+  const pal=['#f45b5b','#f4a25b','#f4e35b','#5bf468','#5bb4f4','#a05bf4','#f45bbf'];
+  for(let i=0;i<10;i++){
+    const r=12+Math.random()*22;
+    bodies.push(new Body(W/2+(Math.random()-.5)*140,H*.35+(Math.random()-.5)*100,'circle',{
+      r,color:pal[i%pal.length],vx:(Math.random()-.5)*14,vy:(Math.random()-.5)*12
+    }));
+  }
+}
+
+// ── Input ─────────────────────────────────────────────
+let drawing=false, dStart={x:0,y:0}, dCur={x:0,y:0};
+let polyPts=[], polyOn=false;
+let grabbed=null,gOffX=0,gOffY=0,gPrevX=0,gPrevY=0,gVX=0,gVY=0;
+
+function pickBody(x,y){
+  for(let i=bodies.length-1;i>=0;i--){
+    const b=bodies[i]; if(b.fixed) continue;
+    const bb=b.aabb;
+    if(x>=bb.x1&&x<=bb.x2&&y>=bb.y1&&y<=bb.y2) return b;
+  }
+  return null;
+}
+
+canvas.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  // Right-click finishes poly
+  if(tool==='poly'&&polyPts.length>=3) finishPoly();
+});
+
+canvas.addEventListener('mousedown',e=>{
+  if(e.button!==0) return;
+  const mx=e.clientX,my=e.clientY;
+  if(my<TB) return;
+
+  if(tool==='grab'){
+    grabbed=pickBody(mx,my);
+    if(grabbed){gOffX=grabbed.x-mx;gOffY=grabbed.y-my;gPrevX=mx;gPrevY=my;gVX=0;gVY=0;grabbed.vx=0;grabbed.vy=0;grabbed.av=0;canvas.style.cursor='grabbing';}
+    return;
+  }
+  if(tool==='poly'){
+    // Prevent duplicate on double-click: check distance from last point
+    if(polyPts.length>0){
+      const last=polyPts[polyPts.length-1];
+      if(Math.abs(mx-last.x)<5&&Math.abs(my-last.y)<5) return;
+    }
+    if(!polyOn){polyOn=true; polyPts=[{x:mx,y:my}];}
+    else polyPts.push({x:mx,y:my});
+    return;
+  }
+  drawing=true; dStart={x:mx,y:my}; dCur={x:mx,y:my};
+});
+
+canvas.addEventListener('mousemove',e=>{
+  const mx=e.clientX,my=e.clientY;
+  if(grabbed){
+    gVX=mx-gPrevX; gVY=my-gPrevY;
+    grabbed.x=mx+gOffX; grabbed.y=my+gOffY;
+    grabbed.vx=0; grabbed.vy=0;
+    gPrevX=mx; gPrevY=my; return;
+  }
+  dCur={x:mx,y:my};
+});
+
+canvas.addEventListener('mouseup',e=>{
+  if(grabbed){ grabbed.vx=gVX*1.6; grabbed.vy=gVY*1.6; grabbed=null; canvas.style.cursor='grab'; return; }
+  if(!drawing) return;
+  drawing=false;
+  const x1=dStart.x,y1=dStart.y,x2=dCur.x,y2=dCur.y;
+  const cx=(x1+x2)/2,cy=(y1+y2)/2,dx=Math.abs(x2-x1),dy=Math.abs(y2-y1);
+  const color=getColor();
+  if(tool==='circle'){
+    const r=Math.max(8,Math.sqrt(dx*dx+dy*dy)/2);
+    bodies.push(new Body(cx,cy,'circle',{r,color}));
+  } else if(tool==='box'){
+    const w=Math.max(10,dx),h=Math.max(10,dy);
+    bodies.push(new Body(cx,cy,'box',{w,h,color}));
+  }
+});
+
+// Double-click finishes poly (but the duplicate-point guard above prevents double-adding)
+canvas.addEventListener('dblclick',e=>{ if(tool==='poly'&&polyPts.length>=3) finishPoly(); });
+
+function finishPoly(){
+  const cx=polyPts.reduce((s,p)=>s+p.x,0)/polyPts.length;
+  const cy=polyPts.reduce((s,p)=>s+p.y,0)/polyPts.length;
+  const verts=cleanVerts(polyPts.map(p=>v2(p.x-cx,p.y-cy)));
+  if(verts.length>=3) bodies.push(new Body(cx,cy,'poly',{verts,color:getColor()}));
+  polyPts=[]; polyOn=false;
+}
+
+// ── Preview ───────────────────────────────────────────
+function drawPreview(){
+  ctx.save();
+  ctx.strokeStyle='rgba(60,60,200,0.5)'; ctx.fillStyle=getColor()+'33';
+  ctx.lineWidth=2; ctx.setLineDash([5,4]);
+  if(tool==='poly'&&polyPts.length>0){
+    ctx.beginPath();
+    polyPts.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+    ctx.lineTo(dCur.x,dCur.y);
+    if(polyPts.length>=3) ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    polyPts.forEach((p,i)=>{
+      ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2);
+      ctx.fillStyle=i===0?'#f00':'#4c4ff0'; ctx.fill();
+    });
+    ctx.restore(); return;
+  }
+  if(!drawing){ctx.restore();return;}
+  const x1=dStart.x,y1=dStart.y,x2=dCur.x,y2=dCur.y;
+  const cx=(x1+x2)/2,cy=(y1+y2)/2,dx=Math.abs(x2-x1),dy=Math.abs(y2-y1);
+  if(tool==='circle'){
+    const r=Math.max(8,Math.sqrt(dx*dx+dy*dy)/2);
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
+  } else if(tool==='box'){
+    const w=Math.max(10,dx),h=Math.max(10,dy);
+    ctx.fillRect(cx-w/2,cy-h/2,w,h);ctx.strokeRect(cx-w/2,cy-h/2,w,h);
+  }
+  ctx.restore();
+}
+
+// ── Loop ──────────────────────────────────────────────
+function loop(){
+  ctx.clearRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='rgba(0,0,0,0.05)'; ctx.lineWidth=1;
+  const gs=44;
+  for(let x=0;x<W;x+=gs){ctx.beginPath();ctx.moveTo(x,TB);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=TB;y<H;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  if(!paused){
+    for(const b of bodies) b.update();
+    collideAll(true);
+    collideAll(true);
+    bounceWalls();
+    bodies=bodies.filter(b=>!b._dead);
+  }
+
+  // Draw floor line
+  ctx.strokeStyle='#aab'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,H); ctx.lineTo(W,H); ctx.stroke();
+
+  for(const b of bodies) b.draw();
+  drawPreview();
+
+  ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.font='11px Segoe UI';
+  ctx.fillText(bodies.filter(b=>!b.fixed).length+' objects',W-78,H-8);
+
+  requestAnimationFrame(loop);
+}
+
+// ── Init ──────────────────────────────────────────────
+addFloor();
+const pal=['#f45b5b','#5bb4f4','#f4c85b','#5bf47a','#a05bf4'];
+bodies.push(new Body(130,160,'circle',{r:28,color:pal[0],vx:2}));
+bodies.push(new Body(290,130,'box',   {w:60,h:45,color:pal[1],vx:-1.5}));
+bodies.push(new Body(440,155,'circle',{r:22,color:pal[2],vx:1.5}));
+bodies.push(new Body(600,120,'box',   {w:55,h:55,color:pal[3],vx:-2}));
+bodies.push(new Body(750,160,'circle',{r:30,color:pal[4],vx:1}));
+loop();
+</script>
+</body>
+</html>
