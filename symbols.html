@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Physics Symbol Copier</title>
+</head>
+<body style="margin:0; padding:24px 32px 60px; background:#f4f5f7; font-family:Arial, Helvetica, sans-serif; color:#1a1a1a;">
+
+<div style="max-width:900px; margin:0 auto;">
+
+  <h1 style="font-size:22px; font-weight:700; margin:0 0 4px;">Physics Symbol Copier</h1>
+  <p style="font-size:14px; color:#555; margin:0 0 18px; line-height:1.5;">
+    Click any tile to copy that symbol as plain text. Or just press its keyboard shortcut
+    (shown in the corner of each tile) — no click needed at all.
+    <strong>Shift+letter</strong> gives you the capital Greek letter.
+  </p>
+
+  <div id="status" style="height:22px; font-size:13px; font-weight:700; color:#1a7a3c; margin-bottom:10px;">&nbsp;</div>
+
+  <div id="grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:8px;"></div>
+
+  <p style="font-size:12px; color:#888; margin-top:26px; line-height:1.6;">
+    Tip: keyboard shortcuts work anywhere on this page — you don't need to click a tile first.
+    If your browser blocks clipboard access, click the tile once to grant permission, after which
+    shortcuts will work too.
+  </p>
+</div>
+
+<script>
+// name, symbol, key (as displayed/typed), shiftForUpper (true if uppercase uses Shift+key)
+var items = [
+  ["Alpha","\u03B1","a"], ["Beta","\u03B2","b"], ["Gamma","\u03B3","g"], ["Delta","\u03B4","d"],
+  ["Epsilon","\u03B5","e"], ["Eta","\u03B7","h"], ["Theta","\u03B8","q"],
+  ["Iota","\u03B9","i"], ["Kappa","\u03BA","k"], ["Lambda","\u03BB","l"], ["Mu","\u03BC","m"],
+  ["Nu","\u03BD","n"], ["Pi","\u03C0","p"], ["Rho","\u03C1","r"],
+  ["Sigma","\u03C3","s"], ["Tau","\u03C4","t"], ["Phi","\u03C6","f"], ["Chi","\u03C7","c"],
+  ["Psi","\u03C8","y"], ["Omega","\u03C9","w"],
+
+  ["Gamma (cap)","\u0393","G"], ["Delta (cap)","\u0394","D"], ["Theta (cap)","\u0398","Q"],
+  ["Sigma (cap)","\u03A3","S"], ["Phi (cap)","\u03A6","F"], ["Psi (cap)","\u03A8","Y"],
+  ["Omega (cap)","\u03A9","W"],
+
+  ["Plus-minus","\u00B1","1"], ["Times","\u00D7","2"], ["Infinity","\u221E","3"],
+  ["Partial","\u2202","4"], ["Nabla","\u2207","5"], ["Sqrt","\u221A","6"],
+  ["h-bar","\u0127","7"], ["Right arrow","\u2192","8"],
+
+  ["Proportional to","\u221D","v"], ["Greater or equal","\u2265","u"],
+  ["Less or equal","\u2264","j"], ["Approximately","\u2248","z"], ["Degree","\u00B0","o"]
+];
+
+var grid = document.getElementById("grid");
+var status = document.getElementById("status");
+var tileByKey = {};
+
+items.forEach(function(item){
+  var name = item[0], symbol = item[1], key = item[2];
+  var isUpper = key === key.toUpperCase() && key.toLowerCase() !== key;
+  var keyLabel = isUpper ? "Shift+" + key.toLowerCase() : key;
+
+  var tile = document.createElement("div");
+  tile.setAttribute("role","button");
+  tile.setAttribute("tabindex","0");
+  tile.title = name + " — press " + keyLabel;
+  tile.style.cssText = "position:relative; background:#ffffff; border:1px solid #d8dae0; border-radius:6px; padding:10px 6px 8px; text-align:center; cursor:pointer; user-select:none; transition:background 0.12s, border-color 0.12s;";
+
+  var symSpan = document.createElement("div");
+  symSpan.textContent = symbol;
+  symSpan.style.cssText = "font-size:26px; line-height:1.2; margin-bottom:4px;";
+
+  var nameSpan = document.createElement("div");
+  nameSpan.textContent = name;
+  nameSpan.style.cssText = "font-size:10px; color:#666; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
+
+  var keySpan = document.createElement("div");
+  keySpan.textContent = keyLabel;
+  keySpan.style.cssText = "position:absolute; top:3px; right:5px; font-size:13px; font-weight:700; color:#7a828f; background:#f0f1f4; border-radius:3px; padding:1px 5px;";
+
+  tile.appendChild(keySpan);
+  tile.appendChild(symSpan);
+  tile.appendChild(nameSpan);
+  grid.appendChild(tile);
+
+  function doCopy(){
+    copySymbol(symbol, name, tile);
+  }
+  tile.addEventListener("click", doCopy);
+  tile.addEventListener("keydown", function(e){
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); doCopy(); }
+  });
+
+  tileByKey[key] = { tile: tile, symbol: symbol, name: name };
+});
+
+function copySymbol(symbol, name, tile){
+  function flash(){
+    var oldBg = tile.style.background;
+    var oldBorder = tile.style.borderColor;
+    tile.style.background = "#e6f6ea";
+    tile.style.borderColor = "#3fae5c";
+    setTimeout(function(){
+      tile.style.background = oldBg || "#ffffff";
+      tile.style.borderColor = oldBorder || "#d8dae0";
+    }, 350);
+    status.textContent = "Copied " + name + " (" + symbol + ")";
+    setTimeout(function(){ status.textContent = "\u00A0"; }, 1400);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(symbol).then(flash, function(){
+      fallbackCopy(symbol);
+      flash();
+    });
+  } else {
+    fallbackCopy(symbol);
+    flash();
+  }
+}
+
+function fallbackCopy(text){
+  var ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+document.addEventListener("keydown", function(e){
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var k = e.key;
+  if (tileByKey.hasOwnProperty(k)) {
+    e.preventDefault();
+    var entry = tileByKey[k];
+    copySymbol(entry.symbol, entry.name, entry.tile);
+  }
+});
+</script>
+
+</body>
+</html>
