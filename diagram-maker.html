@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Physics Diagram Sketchpad</title>
+<style>
+  :root{
+    --ink:#12151d;
+    --paper:#faf8f3;
+    --grid-line:rgba(53,104,212,0.11);
+    --grid-line-strong:rgba(53,104,212,0.22);
+    --toolbar-bg:#12151d;
+    --toolbar-bg2:#1c212e;
+    --toolbar-border:#2a3142;
+    --accent:#3568d4;
+    --accent-hover:#4a78e0;
+    --text-light:#eef0f6;
+    --text-dim:#8891a6;
+    --danger:#d9534f;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    overflow:hidden; overscroll-behavior:none;
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    touch-action:none;
+    font-family:Arial,Helvetica,sans-serif;
+    background:var(--ink);
+  }
+  #app{
+    display:flex; flex-direction:column;
+    height:100vh; height:100dvh; width:100vw;
+  }
+
+  /* ---------- Toolbar ---------- */
+  #toolbar{
+    flex:0 0 auto;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:clamp(8px, 1.8vw, 30px);
+    padding:10px clamp(10px, 2.2vw, 34px);
+    background:linear-gradient(180deg,var(--toolbar-bg),var(--toolbar-bg2));
+    border-bottom:1px solid var(--toolbar-border);
+    min-height:104px;
+  }
+
+  .tb-divider{
+    flex:0 0 auto;
+    width:1px; height:80px;
+    background:var(--toolbar-border);
+  }
+
+  .tb-group{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  #shapeIcons{
+    display:grid;
+    grid-template-rows:repeat(2, 42px);
+    grid-auto-flow:column;
+    gap:6px;
+  }
+
+  .tb-thickness{ flex-direction:column; align-items:flex-start; gap:3px; }
+  .tb-thickness .row{ display:flex; align-items:center; gap:8px; }
+  .tb-thickness label{
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:11px; letter-spacing:.02em;
+    color:var(--text-dim); font-weight:600;
+  }
+  #thicknessVal{
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:12px; color:var(--text-light);
+    min-width:30px;
+  }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:96px; height:4px; border-radius:2px;
+    background:#3a4256; outline:none; touch-action:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:17px; height:17px; border-radius:50%;
+    background:var(--accent); border:2px solid #fff; cursor:pointer; margin-top:-6.5px;
+    box-shadow:0 1px 3px rgba(0,0,0,.4);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:17px; height:17px; border-radius:50%;
+    background:var(--accent); border:2px solid #fff; cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{ background:#3a4256; height:4px; border-radius:2px; }
+
+  .shape-btn, .circuit-btn, .add-btn{
+    width:48px; height:42px;
+    background:var(--paper);
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:grab; touch-action:none;
+    transition:transform .12s ease, box-shadow .12s ease;
+    flex:0 0 auto;
+  }
+  .shape-btn:hover, .circuit-btn:hover{ transform:translateY(-2px); box-shadow:0 5px 12px rgba(0,0,0,.35); }
+  .shape-btn:active, .circuit-btn:active{ cursor:grabbing; transform:translateY(0); }
+  .shape-btn svg, .circuit-btn svg{ width:38px; height:26px; display:block; pointer-events:none; }
+  .shape-btn .abc-icon{ font-family:Arial,Helvetica,sans-serif; font-size:16px; font-weight:bold; color:#151515; pointer-events:none; }
+
+  .add-btn{
+    background:transparent;
+    border:1.5px dashed #4a5268;
+    cursor:pointer;
+    color:var(--text-dim);
+    font-size:20px; font-weight:300;
+  }
+  .add-btn:hover{ border-color:var(--accent); color:var(--accent); }
+
+  .tb-dropdown{ position:relative; }
+  .dropdown-trigger{
+    height:42px;
+    background:var(--paper);
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:9px;
+    padding:0 14px;
+    display:flex; align-items:center; gap:5px;
+    font-family:Arial,Helvetica,sans-serif; font-size:12.5px; color:#151515;
+    cursor:pointer; touch-action:none; white-space:nowrap;
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .dropdown-trigger:hover{ transform:translateY(-2px); box-shadow:0 5px 12px rgba(0,0,0,.35); }
+  .dropdown-panel{
+    position:fixed;
+    background:var(--toolbar-bg2); border:1px solid var(--toolbar-border);
+    border-radius:10px; padding:10px; display:flex; flex-wrap:wrap; gap:8px;
+    width:224px; box-shadow:0 10px 26px rgba(0,0,0,.5); z-index:1000;
+  }
+  .dropdown-panel.hidden{ display:none; }
+
+  .tb-grid{ flex-direction:column; align-items:flex-start; gap:3px; }
+  .tb-grid label{
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:11px; color:var(--text-dim); font-weight:600;
+  }
+  .seg-control{
+    display:flex; flex-direction:column; background:#1c212e; border:1px solid var(--toolbar-border);
+    border-radius:7px; overflow:hidden;
+  }
+  .seg-control button{
+    background:transparent; border:none; color:var(--text-dim);
+    font-family:Arial,Helvetica,sans-serif; font-size:11px;
+    padding:5px 14px; cursor:pointer; text-align:left;
+  }
+  .seg-control button:not(:last-child){ border-bottom:1px solid var(--toolbar-border); }
+  .seg-control button.active{ background:var(--accent); color:#fff; }
+
+  .tb-right{ margin-left:auto; flex:0 0 auto; display:flex; gap:12px; align-items:center; }
+  .clear-btn{
+    background:transparent; border:1px solid var(--toolbar-border);
+    color:var(--text-dim); font-family:Arial,Helvetica,sans-serif;
+    font-size:12px; padding:8px 12px; border-radius:7px;
+    cursor:pointer;
+  }
+  .clear-btn:hover{ border-color:var(--danger); color:var(--danger); }
+
+  /* ---------- Canvas ---------- */
+  #canvasWrap{
+    position:relative;
+    flex:1 1 auto;
+    background-color:var(--paper);
+    background-image:
+      linear-gradient(var(--grid-line-strong) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line-strong) 1px, transparent 1px),
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+    overflow:hidden;
+    touch-action:none;
+  }
+  #canvasWrap.grid-hidden{ background-image:none; }
+  #canvasWrap.grid-enforce{
+    background-image:
+      linear-gradient(rgba(53,104,212,0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53,104,212,0.4) 1px, transparent 1px),
+      linear-gradient(rgba(53,104,212,0.2) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53,104,212,0.2) 1px, transparent 1px);
+  }
+  #canvas{ position:absolute; inset:0; display:block; touch-action:none; }
+  .shape-g{ cursor:move; }
+  .hit-rect{ cursor:move; }
+  .handle{ touch-action:none; }
+  .handle[data-handle="nw"], .handle[data-handle="se"]{ cursor:nwse-resize; }
+  .handle[data-handle="ne"], .handle[data-handle="sw"]{ cursor:nesw-resize; }
+  .handle[data-handle="rot"]{ cursor:grab; }
+  .handle[data-handle="p1"], .handle[data-handle="p2"]{ cursor:grab; }
+  .handle[data-handle="frontW"]{ cursor:ew-resize; }
+  .handle[data-handle="frontH"], .handle[data-handle="cylTop"], .handle[data-handle="waterLevel"]{ cursor:ns-resize; }
+  .handle[data-handle="arcAngle"]{ cursor:pointer; }
+  .handle[data-handle="exportNW"], .handle[data-handle="exportSE"]{ cursor:nwse-resize; }
+  .handle[data-handle="exportNE"], .handle[data-handle="exportSW"]{ cursor:nesw-resize; }
+
+  .label-text{
+    font-family:Arial,Helvetica,sans-serif;
+    color:#151515;
+    width:100%; height:100%;
+    display:flex; align-items:center;
+    overflow:visible;
+    white-space:pre-wrap;
+    line-height:1.25;
+    padding:1px 2px;
+  }
+  .label-edit{
+    width:100%; height:100%;
+    font-family:Arial,Helvetica,sans-serif;
+    border:1.5px solid #3568d4;
+    background:#fff;
+    resize:none;
+    padding:2px;
+    box-sizing:border-box;
+    outline:none;
+  }
+  .frac{ display:inline-flex; flex-direction:column; align-items:center; vertical-align:middle; font-size:.92em; line-height:1.15; margin:0 1px; }
+  .frac .fnum{ padding:0 2px; border-bottom:1.2px solid currentColor; }
+  .frac .fden{ padding:0 2px; }
+
+  .ghost-shape{
+    position:fixed; z-index:999; pointer-events:none;
+    width:52px; height:36px; margin-left:-26px; margin-top:-18px;
+    background:rgba(255,255,255,.95); border:1px solid rgba(53,104,212,.5);
+    border-radius:9px; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 18px rgba(0,0,0,.35);
+  }
+  .ghost-shape svg{ width:40px; height:28px; }
+  .ghost-shape .abc-icon{ font-family:Arial,Helvetica,sans-serif; font-size:17px; font-weight:bold; color:#151515; }
+
+  /* ---------- Floating selection toolbar ---------- */
+  #floatToolbar{
+    position:absolute;
+    transform:translate(0,-100%);
+    display:flex; gap:4px;
+    background:var(--toolbar-bg2);
+    border:1px solid var(--toolbar-border);
+    border-radius:8px;
+    padding:4px;
+    box-shadow:0 6px 16px rgba(0,0,0,.4);
+    z-index:50;
+  }
+  #floatToolbar.hidden{ display:none; }
+  #floatToolbar button{
+    width:30px; height:30px;
+    background:transparent; border:none; border-radius:6px;
+    color:var(--text-light); font-size:15px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  #floatToolbar button:hover{ background:#2c3346; }
+  #floatToolbar button.danger:hover{ background:rgba(217,83,79,.25); color:#ff8a86; }
+  #floatToolbar .fsep{ width:1px; background:var(--toolbar-border); margin:2px 1px; }
+
+  /* ---------- Attribution ---------- */
+  #attribution{
+    position:absolute; left:16px; bottom:14px;
+    font-family:Arial,Helvetica,sans-serif;
+    line-height:1.5; pointer-events:none;
+    opacity:.72;
+  }
+  #attribution .name{ font-size:12.5px; font-weight:bold; color:var(--ink); }
+  #attribution .link{ font-size:11px; color:var(--accent); pointer-events:auto; text-decoration:none; }
+  #attribution .link:hover{ text-decoration:underline; }
+
+  /* ---------- Download button ---------- */
+  #downloadBtn{
+    position:absolute; right:18px; bottom:16px;
+    display:flex; align-items:center; gap:7px;
+    background:var(--accent); color:#fff; border:none;
+    padding:11px 18px; border-radius:999px;
+    font-family:Arial,Helvetica,sans-serif; font-weight:bold; font-size:13.5px;
+    cursor:pointer; box-shadow:0 6px 16px rgba(53,104,212,.45);
+    transition:background .15s ease, transform .1s ease;
+  }
+  #downloadBtn:hover{ background:var(--accent-hover); }
+  #downloadBtn:active{ transform:scale(.96); }
+
+  .toast{
+    position:absolute; z-index:200;
+    background:var(--toolbar-bg2); color:var(--text-light);
+    font-family:Arial,Helvetica,sans-serif; font-size:12px;
+    padding:8px 12px; border-radius:7px; border:1px solid var(--toolbar-border);
+    box-shadow:0 6px 16px rgba(0,0,0,.4);
+    opacity:0; transition:opacity .25s ease;
+    pointer-events:none; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; }
+
+  /* Custom confirm/message dialog (native confirm()/alert() can be
+     blocked inside sandboxed preview frames, so we build our own). */
+  .confirm-overlay{
+    position:fixed; inset:0; z-index:2000;
+    background:rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .confirm-overlay.hidden{ display:none; }
+  .confirm-box{
+    background:var(--toolbar-bg2); color:var(--text-light);
+    border:1px solid var(--toolbar-border); border-radius:12px;
+    padding:20px 22px; max-width:320px; text-align:center;
+    box-shadow:0 16px 40px rgba(0,0,0,.5);
+    font-family:Arial,Helvetica,sans-serif;
+  }
+  .confirm-box p{ margin:0 0 16px; font-size:14px; line-height:1.4; }
+  .confirm-actions{ display:flex; gap:10px; justify-content:center; }
+  .confirm-actions button{
+    font-family:Arial,Helvetica,sans-serif; font-size:13px;
+    padding:8px 16px; border-radius:7px; border:1px solid var(--toolbar-border);
+    background:transparent; color:var(--text-light); cursor:pointer;
+  }
+  .confirm-actions button#confirmOk{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .confirm-actions button:hover{ opacity:.85; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header id="toolbar">
+    <div class="tb-group tb-grid">
+      <label>Grid</label>
+      <div class="seg-control" id="gridSeg">
+        <button data-mode="hide">Hide</button>
+        <button data-mode="show" class="active">Show</button>
+        <button data-mode="enforce">Enforce</button>
+      </div>
+    </div>
+    <div class="tb-divider"></div>
+
+    <div class="tb-group tb-thickness">
+      <label for="thickness">Size</label>
+      <div class="row">
+        <input type="range" id="thickness" min="1" max="10" step="1" value="2">
+        <span id="thicknessVal">2px</span>
+      </div>
+    </div>
+    <div class="tb-divider"></div>
+
+    <div class="tb-group" id="shapeIcons"></div>
+    <div class="tb-divider"></div>
+    <div class="tb-group tb-dropdown">
+      <button class="dropdown-trigger" id="circuitTrigger">Circuits ▾</button>
+      <div class="dropdown-panel hidden" id="circuitPanel"></div>
+    </div>
+    <div class="tb-divider"></div>
+    <div class="tb-group tb-dropdown">
+      <button class="dropdown-trigger" id="objectsTrigger">Objects ▾</button>
+      <div class="dropdown-panel hidden" id="objectsPanel"></div>
+    </div>
+
+    <div class="tb-right">
+      <button class="clear-btn" id="clearBtn">Clear</button>
+    </div>
+  </header>
+
+  <main id="canvasWrap">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="rectGradient" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#cccccc"/>
+        </linearGradient>
+      </defs>
+      <g id="shapesLayer"></g>
+      <g id="handlesLayer"></g>
+      <g id="exportRectLayer"></g>
+    </svg>
+
+    <div id="floatToolbar" class="hidden"></div>
+
+    <div id="confirmOverlay" class="confirm-overlay hidden">
+      <div class="confirm-box">
+        <p id="confirmMsg">Are you sure?</p>
+        <div class="confirm-actions">
+          <button id="confirmCancel">Cancel</button>
+          <button id="confirmOk">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="attribution">
+      <div class="name">Danny Doucette</div>
+      <a class="link" href="https://thinkib.net/physics" target="_blank" rel="noopener">thinkib.net/physics</a>
+    </div>
+
+    <button id="downloadBtn" title="Download diagram as PNG">⬇ Save PNG</button>
+  </main>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     SHAPE GEOMETRY  — every shape is drawn inside a local box
+     (0,0) to (w,h). The group transform (translate/rotate/flip)
+     is applied around this box, so these functions never need
+     to know about position, rotation or reflection.
+     ============================================================ */
+
+  // Shared helper for shapes with a solid / dashed / white line style.
+  function lineStyleAttrs(sw, lineStyle, dashScale){
+    if(dashScale == null) dashScale = 1;
+    const color = lineStyle === 'white' ? '#ffffff' : '#151515';
+    const dash = lineStyle === 'dashed' ? ` stroke-dasharray="${(sw*2.2*dashScale).toFixed(1)} ${(sw*1.6*dashScale).toFixed(1)}"` : '';
+    return { color, attr: `stroke="${color}" stroke-width="${sw}"${dash}` };
+  }
+
+  function drawLine(w,h,sw,lineStyle){
+    const y = h/2;
+    const ls = lineStyleAttrs(sw, lineStyle, 1.1);
+    return `<line x1="0" y1="${y}" x2="${w}" y2="${y}" ${ls.attr} stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  function drawArrow(w,h,sw,lineStyle){
+    const y = h/2;
+    const len = 9 + sw*1.8;
+    const ls = lineStyleAttrs(sw, lineStyle, 1.1);
+    return `<line x1="0" y1="${y}" x2="${Math.max(w-len*0.85,0)}" y2="${y}" ${ls.attr} stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <polygon points="${w},${y} ${w-len},${y-len*0.5} ${w-len},${y+len*0.5}" fill="${ls.color}"/>`;
+  }
+
+  function drawDoubleArrow(w,h,sw,lineStyle){
+    const y = h/2;
+    const len = 9 + sw*1.8;
+    const ls = lineStyleAttrs(sw, lineStyle, 1.1);
+    const x0 = Math.min(len*0.85, w/2), x1 = Math.max(w-len*0.85, w/2);
+    return `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" ${ls.attr} stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <polygon points="0,${y} ${len},${y-len*0.5} ${len},${y+len*0.5}" fill="${ls.color}"/>
+      <polygon points="${w},${y} ${w-len},${y-len*0.5} ${w-len},${y+len*0.5}" fill="${ls.color}"/>`;
+  }
+
+  // Coil / spring, drawn as a cycloid — the curve traced by a point at
+  // distance k*R from the center of a circle of radius R rolling along a
+  // line. With k>1 (a "prolate" cycloid) the loops cross over themselves,
+  // giving overlapping coils. The coil spans the full width of the box.
+  function drawSpring(w,h,sw){
+    const n = 5.5;             // number of coils (may be fractional)
+    const k = 2.0;             // oblateness: >1 makes the loops cross over themselves
+    const amp = h/2;         // target amplitude
+    const yScale = amp/k;
+    const stepsPerPeriod = 24;
+    const totalSteps = Math.round(n*stepsPerPeriod);
+    const t0 = Math.PI/2;    // phase so the curve starts/ends on the midline
+    const tEnd = t0 + n*2*Math.PI;
+    const xr0 = t0 - k*Math.sin(t0);
+    // Use the curve's actual raw extent (not the naive 2*pi*n) so a
+    // fractional coil count still fills the box exactly, since the raw
+    // width only equals 2*pi*n for a whole number of periods.
+    const xrEnd = tEnd - k*Math.sin(tEnd);
+    const xScale = w/(xrEnd - xr0);
+    let pts = [];
+    for(let i=0;i<=totalSteps;i++){
+      const t = t0 + (i/stepsPerPeriod)*2*Math.PI;
+      const xr = (t - k*Math.sin(t)) - xr0;
+      const yr = 1 - k*Math.cos(t);
+      const X = xr*xScale;
+      const Y = (h/2) + (yr-1)*yScale;
+      pts.push(X.toFixed(2)+','+Y.toFixed(2));
+    }
+    return `<path d="M${pts.join(' L')}" stroke="#151515" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Simple upward-opening parabola spanning the box, vertex at the bottom.
+  function drawParabola(w,h,sw,lineStyle){
+    const N = 40;
+    let pts = [];
+    for(let i=0;i<=N;i++){
+      const x = w*i/N;
+      const xn = (2*x/w - 1);
+      const y = h*(1 - xn*xn);
+      pts.push(x.toFixed(2)+','+y.toFixed(2));
+    }
+    const ls = lineStyleAttrs(sw, lineStyle);
+    return `<path d="M${pts.join(' L')}" ${ls.attr} fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Plain sine wave, 3 full oscillations across the box.
+  function drawSineWave(w,h,sw,lineStyle){
+    const N = 60, amp = h*0.4, cycles = 1;
+    let pts = [];
+    for(let i=0;i<=N;i++){
+      const x = w*i/N;
+      const y = h/2 - amp*Math.sin(2*Math.PI*cycles*x/w);
+      pts.push(x.toFixed(2)+','+y.toFixed(2));
+    }
+    const ls = lineStyleAttrs(sw, lineStyle);
+    return `<path d="M${pts.join(' L')}" ${ls.attr} fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Triangle defined by 3 independently draggable vertices (in local
+  // coordinates), rather than inscribed in a bounding box.
+  function drawTriangle(w,h,sw,fill,lineStyle,pts){
+    if(!pts) pts = defaultTrianglePts(w,h);
+    const ls = lineStyleAttrs(sw, lineStyle);
+    const pointStr = pts.map(p=>`${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+    return `<polygon points="${pointStr}" ${ls.attr} fill="${fill||'none'}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  }
+  // Right-angle triangle by default: right angle at the bottom-left.
+  function defaultTrianglePts(w,h){
+    return [{x:0,y:h}, {x:w,y:h}, {x:0,y:0}];
+  }
+
+  function drawRect(w,h,sw,fill,lineStyle){
+    const ls = lineStyleAttrs(sw, lineStyle);
+    return `<rect x="0" y="0" width="${w}" height="${h}" ${ls.attr} fill="${fill||'none'}" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  function drawCircle(w,h,sw,fill,lineStyle){
+    const ls = lineStyleAttrs(sw, lineStyle);
+    return `<ellipse cx="${w/2}" cy="${h/2}" rx="${w/2}" ry="${h/2}" ${ls.attr} fill="${fill||'none'}" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  function drawArc(w,h,sw,arcAngle,fill,lineStyle,arrow){
+    if(arcAngle == null) arcAngle = 90;
+    const rad = arcAngle*Math.PI/180;
+    const xB = w*(1-Math.cos(rad)), yB = h*(1-Math.sin(rad));
+    const isFilled = fill && fill !== 'none';
+    const ls = lineStyleAttrs(sw, lineStyle);
+    // When filled, close the wedge back to the ellipse's center (w,h) so it
+    // reads as a filled angle sector rather than an unclosed curve.
+    const d = isFilled
+      ? `M0,${h} A${w},${h} 0 0 1 ${xB.toFixed(2)},${yB.toFixed(2)} L${w},${h} Z`
+      : `M0,${h} A${w},${h} 0 0 1 ${xB.toFixed(2)},${yB.toFixed(2)}`;
+    const path = `<path d="${d}" ${ls.attr} fill="${fill||'none'}" vector-effect="non-scaling-stroke"/>`;
+    let arrowHead = '';
+    if(arrow){
+      // An arrowhead whose base sits at the arc's bottom endpoint (0,h),
+      // pointing straight down (its tip extends past the endpoint) in
+      // the shape's local frame.
+      const size = 8 + sw*1.6, spread = 0.5, angle = Math.PI/2;
+      const anchorX = 0, anchorY = h;
+      const tipX = anchorX + size*Math.cos(angle), tipY = anchorY + size*Math.sin(angle);
+      const halfWidth = size*Math.sin(spread);
+      const perp = angle + Math.PI/2;
+      const b1x = anchorX + halfWidth*Math.cos(perp), b1y = anchorY + halfWidth*Math.sin(perp);
+      const b2x = anchorX - halfWidth*Math.cos(perp), b2y = anchorY - halfWidth*Math.sin(perp);
+      arrowHead = `<polygon points="${tipX.toFixed(2)},${tipY.toFixed(2)} ${b1x.toFixed(2)},${b1y.toFixed(2)} ${b2x.toFixed(2)},${b2y.toFixed(2)}" fill="${ls.color}"/>`;
+    }
+    return path + arrowHead;
+  }
+
+  function drawPrism(w,h,sw,frontRatioW,frontRatioH,fill){
+    if(frontRatioW == null) frontRatioW = 0.72;
+    if(frontRatioH == null) frontRatioH = 0.76;
+    const fw = w*frontRatioW, fh = h*frontRatioH;
+    const dx = w-fw, dy = -(h-fh);
+    const fx0=0, fy0=h-fh, fx1=fw, fy1=h;
+    const bx0=fx0+dx, by0=fy0+dy, bx1=fx1+dx, by1=fy1+dy;
+    const st = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+    const isFilled = fill && fill !== 'none';
+    // A filled front face hides the back face's hidden (dashed) edges.
+    const hidden = isFilled ? '' : `
+      <line x1="${bx0}" y1="${by1}" x2="${bx1}" y2="${by1}" ${st} stroke-dasharray="${sw*1.6} ${sw*1.6}"/>
+      <line x1="${bx0}" y1="${by0}" x2="${bx0}" y2="${by1}" ${st} stroke-dasharray="${sw*1.6} ${sw*1.6}"/>
+      <line x1="${fx0}" y1="${fy1}" x2="${bx0}" y2="${by1}" ${st} stroke-dasharray="${sw*1.6} ${sw*1.6}"/>`;
+    // When filled, the top and side faces (parallelograms) get filled too.
+    const fillShapes = isFilled ? `
+      <polygon points="${fx0},${fy0} ${fx1},${fy0} ${bx1},${by0} ${bx0},${by0}" fill="${fill}" stroke="none"/>
+      <polygon points="${fx1},${fy0} ${fx1},${fy1} ${bx1},${by1} ${bx1},${by0}" fill="${fill}" stroke="none"/>
+      <rect x="${fx0}" y="${fy0}" width="${fw}" height="${fh}" fill="${fill}" stroke="none"/>` : '';
+    return `
+      ${fillShapes}
+      ${hidden}
+      <line x1="${bx0}" y1="${by0}" x2="${bx1}" y2="${by0}" ${st}/>
+      <line x1="${bx1}" y1="${by0}" x2="${bx1}" y2="${by1}" ${st}/>
+      <line x1="${fx0}" y1="${fy0}" x2="${bx0}" y2="${by0}" ${st}/>
+      <line x1="${fx1}" y1="${fy0}" x2="${bx1}" y2="${by0}" ${st}/>
+      <line x1="${fx1}" y1="${fy1}" x2="${bx1}" y2="${by1}" ${st}/>
+      <rect x="${fx0}" y="${fy0}" width="${fw}" height="${fh}" fill="none" ${st}/>
+    `;
+  }
+
+  function drawCylinder(w,h,sw,ellipseRatio,fill){
+    if(ellipseRatio == null) ellipseRatio = 0.14;
+    const ry = Math.max(h*ellipseRatio, 6), rx = w/2, topCy = ry, botCy = h-ry;
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" vector-effect="non-scaling-stroke"`;
+    const isFilled = fill && fill !== 'none';
+    const fillShapes = isFilled ? `
+      <rect x="0" y="${topCy}" width="${w}" height="${botCy-topCy}" fill="${fill}" stroke="none"/>
+      <path d="M0,${topCy} A${rx},${ry} 0 1 1 ${w},${topCy} A${rx},${ry} 0 1 1 0,${topCy} Z" fill="${fill}" stroke="none"/>
+      <path d="M0,${botCy} A${rx},${ry} 0 0 0 ${w},${botCy} Z" fill="${fill}" stroke="none"/>` : '';
+    return `
+      ${fillShapes}
+      <path d="M0,${topCy} A${rx},${ry} 0 1 1 ${w},${topCy} A${rx},${ry} 0 1 1 0,${topCy}" ${st}/>
+      <line x1="0" y1="${topCy}" x2="0" y2="${botCy}" ${st}/>
+      <line x1="${w}" y1="${topCy}" x2="${w}" y2="${botCy}" ${st}/>
+      <path d="M0,${botCy} A${rx},${ry} 0 0 0 ${w},${botCy}" ${st}/>
+    `;
+  }
+
+  function drawBattery(w,h,sw){
+    const midY=h/2, gap=Math.max(w*0.1,6), cx=w/2;
+    const longX=cx-gap/2, shortX=cx+gap/2, longH=h*0.8, shortH=h*0.42;
+    const st = `stroke="#151515" vector-effect="non-scaling-stroke"`;
+    return `
+      <line x1="0" y1="${midY}" x2="${longX}" y2="${midY}" stroke-width="${sw}" ${st}/>
+      <line x1="${longX}" y1="${midY-longH/2}" x2="${longX}" y2="${midY+longH/2}" stroke-width="${sw}" ${st}/>
+      <line x1="${shortX}" y1="${midY-shortH/2}" x2="${shortX}" y2="${midY+shortH/2}" stroke-width="${sw*2.4}" ${st}/>
+      <line x1="${shortX}" y1="${midY}" x2="${w}" y2="${midY}" stroke-width="${sw}" ${st}/>
+    `;
+  }
+
+  function drawResistor(w,h,sw){
+    const midY=h/2, rw=w*0.5, rh=h*0.55, rx0=(w-rw)/2, ry0=(h-rh)/2;
+    const st = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+    return `
+      <line x1="0" y1="${midY}" x2="${rx0}" y2="${midY}" ${st}/>
+      <rect x="${rx0}" y="${ry0}" width="${rw}" height="${rh}" fill="none" ${st}/>
+      <line x1="${rx0+rw}" y1="${midY}" x2="${w}" y2="${midY}" ${st}/>
+    `;
+  }
+
+  // Small helper: a straight line with an arrowhead at (x2,y2), used for
+  // the "incoming light" rays on the LDR and solar-cell symbols.
+  function arrowLineHead(x1,y1,x2,y2,sw){
+    const ang = Math.atan2(y2-y1, x2-x1);
+    const headLen = 6+sw*1.3, spread = 0.5;
+    const hx1 = x2-headLen*Math.cos(ang-spread), hy1 = y2-headLen*Math.sin(ang-spread);
+    const hx2 = x2-headLen*Math.cos(ang+spread), hy2 = y2-headLen*Math.sin(ang+spread);
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#151515" stroke-width="${sw}" stroke-linecap="round" vector-effect="non-scaling-stroke"/><polygon points="${x2},${y2} ${hx1.toFixed(2)},${hy1.toFixed(2)} ${hx2.toFixed(2)},${hy2.toFixed(2)}" fill="#151515"/>`;
+  }
+
+  function drawLDR(w,h,sw){
+    const midY = h/2, rw = w*0.5, rh = h*0.32, rx0 = (w-rw)/2, ry0 = midY-rh/2;
+    const st = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+    const body = `
+      <line x1="0" y1="${midY}" x2="${rx0}" y2="${midY}" ${st}/>
+      <rect x="${rx0}" y="${ry0}" width="${rw}" height="${rh}" fill="none" ${st}/>
+      <line x1="${rx0+rw}" y1="${midY}" x2="${w}" y2="${midY}" ${st}/>
+    `;
+    const arrow = arrowLineHead(w*0.72, 2, rx0+rw*0.5, ry0-3, sw);
+    return body + arrow;
+  }
+
+  function drawMeter(letter){
+    return function(w,h,sw){
+      const midY = h/2, r = Math.min(h*0.42, w*0.22), cx = w/2;
+      const leadEndL = cx-r, leadEndR = cx+r;
+      const st = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+      return `
+        <line x1="0" y1="${midY}" x2="${leadEndL}" y2="${midY}" ${st}/>
+        <circle cx="${cx}" cy="${midY}" r="${r}" fill="none" ${st}/>
+        <text x="${cx}" y="${midY}" font-family="Arial,Helvetica,sans-serif" font-size="${(r*1.15).toFixed(1)}" font-weight="bold" fill="#151515" text-anchor="middle" dominant-baseline="central">${letter}</text>
+        <line x1="${leadEndR}" y1="${midY}" x2="${w}" y2="${midY}" ${st}/>
+      `;
+    };
+  }
+  const drawAmmeter = drawMeter('A');
+  const drawVoltmeter = drawMeter('V');
+
+  // EU-style lamp/lightbulb: a circle with an X through it, in-line.
+  function drawLightbulb(w,h,sw){
+    const midY = h/2, r = Math.min(h*0.42, w*0.22), cx = w/2;
+    const leadEndL = cx-r, leadEndR = cx+r;
+    const st = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+    const inset = r*0.62;
+    return `
+      <line x1="0" y1="${midY}" x2="${leadEndL}" y2="${midY}" ${st}/>
+      <circle cx="${cx}" cy="${midY}" r="${r}" fill="none" ${st}/>
+      <line x1="${(cx-inset).toFixed(2)}" y1="${(midY-inset).toFixed(2)}" x2="${(cx+inset).toFixed(2)}" y2="${(midY+inset).toFixed(2)}" ${st}/>
+      <line x1="${(cx-inset).toFixed(2)}" y1="${(midY+inset).toFixed(2)}" x2="${(cx+inset).toFixed(2)}" y2="${(midY-inset).toFixed(2)}" ${st}/>
+      <line x1="${leadEndR}" y1="${midY}" x2="${w}" y2="${midY}" ${st}/>
+    `;
+  }
+
+  /* ============================================================
+     SIMPLE OBJECT PICTOGRAMS — plain line-art icons for common
+     physics-problem props. All outline-only, no fill.
+     ============================================================ */
+  function drawToyCar(w,h,sw){
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" vector-effect="non-scaling-stroke"`;
+    const wheelSt = `stroke="#151515" stroke-width="${sw}" fill="#151515" vector-effect="non-scaling-stroke"`;
+    return `
+      <rect x="${0.05*w}" y="${0.3*h}" width="${0.9*w}" height="${0.4*h}" ${st}/>
+      <circle cx="${0.26*w}" cy="${0.72*h}" r="${0.15*h}" ${wheelSt}/>
+      <circle cx="${0.74*w}" cy="${0.72*h}" r="${0.15*h}" ${wheelSt}/>
+    `;
+  }
+
+  function drawBalloon(w,h,sw){
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" vector-effect="non-scaling-stroke"`;
+    return `
+      <ellipse cx="${0.5*w}" cy="${0.36*h}" rx="${0.33*w}" ry="${0.34*h}" ${st}/>
+      <path d="M ${0.43*w},${0.78*h} L ${0.5*w},${0.68*h} L ${0.57*w},${0.78*h} Z" ${st} stroke-linejoin="round"/>
+      <line x1="${0.5*w}" y1="${0.78*h}" x2="${0.5*w}" y2="${0.98*h}" ${st} stroke-linecap="round"/>
+    `;
+  }
+
+  function drawRocket(w,h,sw){
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
+    return `
+      <path d="M ${0.5*w},${0.02*h} L ${0.66*w},${0.38*h} L ${0.66*w},${0.72*h} L ${0.34*w},${0.72*h} L ${0.34*w},${0.38*h} Z" ${st}/>
+      <path d="M ${0.34*w},${0.55*h} L ${0.16*w},${0.82*h} L ${0.34*w},${0.72*h} Z" ${st}/>
+      <path d="M ${0.66*w},${0.55*h} L ${0.84*w},${0.82*h} L ${0.66*w},${0.72*h} Z" ${st}/>
+      <circle cx="${0.5*w}" cy="${0.44*h}" r="${0.09*w}" ${st}/>
+    `;
+  }
+
+  function drawMicrophone(w,h,sw){
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"`;
+    const capX0 = 0.32*w, capX1 = 0.68*w, capY0 = 0.04*h, capY1 = 0.5*h;
+    const capR = (capX1-capX0)/2;
+    return `
+      <path d="M ${capX0},${capY0+capR} A ${capR},${capR} 0 0 1 ${capX1},${capY0+capR} L ${capX1},${capY1-capR} A ${capR},${capR} 0 0 1 ${capX0},${capY1-capR} Z" ${st}/>
+      <path d="M ${0.2*w},${0.46*h} Q ${0.2*w},${0.72*h} ${0.5*w},${0.72*h} Q ${0.8*w},${0.72*h} ${0.8*w},${0.46*h}" ${st}/>
+      <line x1="${0.5*w}" y1="${0.72*h}" x2="${0.5*w}" y2="${0.88*h}" ${st}/>
+      <line x1="${0.32*w}" y1="${0.9*h}" x2="${0.68*w}" y2="${0.9*h}" ${st}/>
+    `;
+  }
+
+  function drawAirplane(w,h,sw){
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
+    return `
+      <path d="M ${0.98*w},${0.5*h} Q ${0.85*w},${0.42*h} ${0.5*w},${0.44*h} Q ${0.15*w},${0.45*h} ${0.02*w},${0.5*h} Q ${0.15*w},${0.55*h} ${0.5*w},${0.56*h} Q ${0.85*w},${0.58*h} ${0.98*w},${0.5*h} Z" ${st}/>
+      <path d="M ${0.3*w},${0.5*h} L ${0.46*w},${0.05*h} L ${0.58*w},${0.08*h} L ${0.48*w},${0.5*h} Z" ${st}/>
+      <path d="M ${0.3*w},${0.5*h} L ${0.46*w},${0.95*h} L ${0.58*w},${0.92*h} L ${0.48*w},${0.5*h} Z" ${st}/>
+      <path d="M ${0.86*w},${0.5*h} L ${0.97*w},${0.28*h} L ${1.0*w},${0.3*h} L ${0.92*w},${0.5*h} Z" ${st}/>
+      <circle cx="${0.06*w}" cy="${0.5*h}" r="${0.02*w}" fill="#151515"/>
+    `;
+  }
+
+  function drawBeaker(w,h,sw,waterLevel){
+    if(waterLevel == null) waterLevel = 0.5;
+    const bl=0.18*w, br=0.82*w, bt=0.12*h, bb=0.92*h;
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"`;
+    const waterY = bb - waterLevel*(bb-bt);
+    const water = `
+      <rect x="${bl}" y="${waterY.toFixed(2)}" width="${br-bl}" height="${(bb-waterY).toFixed(2)}" fill="#ffffff" fill-opacity="1" stroke="none"/>
+      <line x1="${bl}" y1="${waterY.toFixed(2)}" x2="${br}" y2="${waterY.toFixed(2)}" stroke="#151515" stroke-width="${Math.max(sw*0.8,1)}" vector-effect="non-scaling-stroke"/>
+    `;
+    const outline = `
+      <path d="M ${bl},${bt} L ${bl},${bb} L ${br},${bb} L ${br},${bt}" ${st}/>
+      <line x1="${bl}" y1="${bt}" x2="${bl-0.05*w}" y2="${bt-0.02*h}" ${st}/>
+      <line x1="${br}" y1="${bt}" x2="${br+0.05*w}" y2="${bt-0.02*h}" ${st}/>
+    `;
+    return water + outline;
+  }
+
+  function drawDot(w,h,sw,fill){
+    const cx = w/2, cy = h/2, r = sw*2;
+    const color = fill || '#151515';
+    const borderWidth = sw <= 3 ? 1 : Math.max(1, sw*0.3);
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="#151515" stroke-width="${borderWidth}" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Vector-into/out-of-the-page symbol: an X in a circle (into the page)
+  // or a dot in a circle (out of the page). Scales like the point.
+  function drawVectorField(w,h,sw,mode){
+    if(mode == null) mode = 'out';
+    const cx = w/2, cy = h/2, r = sw*2.2;
+    const st = `stroke="#151515" stroke-width="${Math.max(sw*0.35,1)}" fill="none" vector-effect="non-scaling-stroke"`;
+    const inset = r*0.62;
+    if(mode === 'in'){
+      return `
+        <circle cx="${cx}" cy="${cy}" r="${r}" ${st}/>
+        <line x1="${(cx-inset).toFixed(2)}" y1="${(cy-inset).toFixed(2)}" x2="${(cx+inset).toFixed(2)}" y2="${(cy+inset).toFixed(2)}" ${st}/>
+        <line x1="${(cx-inset).toFixed(2)}" y1="${(cy+inset).toFixed(2)}" x2="${(cx+inset).toFixed(2)}" y2="${(cy-inset).toFixed(2)}" ${st}/>
+      `;
+    }
+    if(mode === 'plus'){
+      return `
+        <circle cx="${cx}" cy="${cy}" r="${r}" ${st}/>
+        <line x1="${(cx-inset).toFixed(2)}" y1="${cy}" x2="${(cx+inset).toFixed(2)}" y2="${cy}" ${st}/>
+        <line x1="${cx}" y1="${(cy-inset).toFixed(2)}" x2="${cx}" y2="${(cy+inset).toFixed(2)}" ${st}/>
+      `;
+    }
+    if(mode === 'minus'){
+      return `
+        <circle cx="${cx}" cy="${cy}" r="${r}" ${st}/>
+        <line x1="${(cx-inset).toFixed(2)}" y1="${cy}" x2="${(cx+inset).toFixed(2)}" y2="${cy}" ${st}/>
+      `;
+    }
+    return `
+      <circle cx="${cx}" cy="${cy}" r="${r}" ${st}/>
+      <circle cx="${cx}" cy="${cy}" r="${(r*0.35).toFixed(2)}" fill="#151515" stroke="none"/>
+    `;
+  }
+
+  function drawStickMan(w,h,sw){
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"`;
+    const headR = w*0.22;
+    const headCy = headR + sw;
+    const bodyTop = headCy + headR;
+    const bodyBottom = h*0.62;
+    const armY = bodyTop + (bodyBottom-bodyTop)*0.28;
+    return `
+      <circle cx="${w/2}" cy="${headCy}" r="${headR}" ${st}/>
+      <line x1="${w/2}" y1="${bodyTop}" x2="${w/2}" y2="${bodyBottom}" ${st}/>
+      <line x1="${w/2}" y1="${armY}" x2="${w*0.12}" y2="${armY+(bodyBottom-bodyTop)*0.35}" ${st}/>
+      <line x1="${w/2}" y1="${armY}" x2="${w*0.88}" y2="${armY+(bodyBottom-bodyTop)*0.35}" ${st}/>
+      <line x1="${w/2}" y1="${bodyBottom}" x2="${w*0.22}" y2="${h*0.98}" ${st}/>
+      <line x1="${w/2}" y1="${bodyBottom}" x2="${w*0.78}" y2="${h*0.98}" ${st}/>
+    `;
+  }
+
+  // A thick line with short diagonal hatching on one side, for indicating
+  // a wall, floor, or ceiling in a diagram.
+  function drawSurface(w,h,sw){
+    const midY = h/2;
+    const mainSt = `stroke="#151515" stroke-width="${sw*2}" stroke-linecap="round" vector-effect="non-scaling-stroke"`;
+    const hatchSt = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+    const spacing = Math.max(w/8, 10);
+    const hatchLen = Math.min(h*0.42, spacing*1.1);
+    let hatches = '';
+    for(let x = spacing*0.5; x < w; x += spacing){
+      hatches += `<line x1="${x.toFixed(1)}" y1="${midY+sw}" x2="${(x-hatchLen*0.6).toFixed(1)}" y2="${(midY+sw+hatchLen).toFixed(1)}" ${hatchSt}/>`;
+    }
+    return `<line x1="0" y1="${midY}" x2="${w}" y2="${midY}" ${mainSt}/>${hatches}`;
+  }
+
+  // Simple line-art sphere: outline circle, a dashed "equator" ellipse to
+  // suggest curvature, and a small highlight arc.
+  function drawSphere(w,h,sw,fill){
+    const cx = w/2, cy = h/2, r = Math.min(w,h)/2;
+    const st = `stroke="#151515" stroke-width="${sw}" vector-effect="non-scaling-stroke"`;
+    return `
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill||'none'}" ${st}/>
+      <ellipse cx="${cx}" cy="${cy}" rx="${r*0.94}" ry="${r*0.32}" fill="none" ${st} stroke-dasharray="${(sw*1.4).toFixed(1)} ${(sw*1.4).toFixed(1)}"/>
+      <path d="M ${(cx-r*0.55).toFixed(2)},${(cy-r*0.72).toFixed(2)} A ${(r*0.85).toFixed(2)},${(r*0.48).toFixed(2)} 0 0 1 ${(cx+r*0.12).toFixed(2)},${(cy-r*0.9).toFixed(2)}" fill="none" ${st}/>
+    `;
+  }
+
+  // Sinusoidal wave modulated by a Gaussian envelope, showing 5 oscillations.
+  function drawWavePacket(w,h,sw){
+    const cx = w/2, sigma = w/5, amp = h*0.42;
+    const N = 120;
+    let wavePts = [];
+    for(let i=0;i<=N;i++){
+      const x = w*i/N;
+      const g = Math.exp(-Math.pow((x-cx)/sigma, 2));
+      const y = h/2 - amp*g*Math.sin(2*Math.PI*5*x/w);
+      wavePts.push(x.toFixed(2)+','+y.toFixed(2));
+    }
+    const waveSt = `stroke="#151515" stroke-width="${sw}" fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"`;
+    return `<path d="M${wavePts.join(' L')}" ${waveSt}/>`;
+  }
+
+  // Circle with an "X" through it — a standard symbol for an axis / a
+  // vector or field pointing into the page.
+  function drawAxisSymbol(w,h,sw){
+    const cx = w/2, cy = h/2, r = Math.min(w,h)/2;
+    const st = `stroke="#151515" stroke-width="${sw}" fill="none" vector-effect="non-scaling-stroke"`;
+    const inset = r*0.62;
+    return `
+      <circle cx="${cx}" cy="${cy}" r="${r}" ${st}/>
+      <line x1="${(cx-inset).toFixed(2)}" y1="${(cy-inset).toFixed(2)}" x2="${(cx+inset).toFixed(2)}" y2="${(cy+inset).toFixed(2)}" ${st}/>
+      <line x1="${(cx-inset).toFixed(2)}" y1="${(cy+inset).toFixed(2)}" x2="${(cx+inset).toFixed(2)}" y2="${(cy-inset).toFixed(2)}" ${st}/>
+    `;
+  }
+
+  const SHAPE_DEFS = {
+    line: drawLine, arrow: drawArrow, doublearrow: drawDoubleArrow, spring: drawSpring, parabola: drawParabola,
+    sinewave: drawSineWave, rect: drawRect, triangle: drawTriangle,
+    circle: drawCircle, arc: drawArc, prism: drawPrism, cylinder: drawCylinder,
+    battery: drawBattery, resistor: drawResistor,
+    ldr: drawLDR, ammeter: drawAmmeter, voltmeter: drawVoltmeter, lightbulb: drawLightbulb,
+    toycar: drawToyCar, balloon: drawBalloon, rocket: drawRocket,
+    airplane: drawAirplane, microphone: drawMicrophone,
+    beaker: drawBeaker, dot: drawDot, vectorfield: drawVectorField, stickman: drawStickMan,
+    surface: drawSurface, sphere: drawSphere, wavepacket: drawWavePacket,
+    axis: drawAxisSymbol
+  };
+
+  // Types that are 1-dimensional: they get 2 endpoint handles
+  // (length + rotation combined) instead of 4 corners + a rotate handle.
+  const LINEAR_TYPES = ['line','arrow','doublearrow','battery','resistor','ldr','ammeter','voltmeter','lightbulb','surface'];
+
+  // Types with a single fillable interior region.
+  const FILLABLE_TYPES = ['rect','circle','arc','prism','cylinder','sphere','triangle'];
+
+  // Types that can be toggled between solid / dashed / white strokes.
+  const DASHABLE_TYPES = ['line','arrow','doublearrow','circle','rect','arc','parabola','sinewave','triangle'];
+
+  // Types that behave like a point: fixed-size (driven by the Size
+  // slider), snap by their center rather than a bounding-box corner, and
+  // get a simple selection ring instead of resize/rotate handles.
+  const POINT_TYPES = ['dot','vectorfield'];
+
+  const DEFAULT_SIZE = {
+    line:{w:140,h:20}, arrow:{w:140,h:20}, doublearrow:{w:140,h:20}, spring:{w:160,h:50},
+    parabola:{w:130,h:80}, sinewave:{w:160,h:60}, rect:{w:140,h:90}, triangle:{w:110,h:100},
+    circle:{w:100,h:100}, arc:{w:100,h:100}, prism:{w:150,h:105}, cylinder:{w:90,h:130},
+    battery:{w:110,h:60}, resistor:{w:110,h:50}, label:{w:140,h:46},
+    ldr:{w:120,h:80}, ammeter:{w:100,h:50}, voltmeter:{w:100,h:50}, lightbulb:{w:100,h:50},
+    toycar:{w:120,h:75}, balloon:{w:70,h:95}, rocket:{w:60,h:100},
+    airplane:{w:130,h:55}, microphone:{w:70,h:110},
+    beaker:{w:90,h:110}, dot:{w:30,h:30}, vectorfield:{w:44,h:44}, stickman:{w:60,h:120},
+    surface:{w:160,h:30}, sphere:{w:100,h:100}, wavepacket:{w:170,h:70}, axis:{w:60,h:60}
+  };
+
+  const ICON_CFG = {
+    line:{w:30,h:16,tx:7,ty:6}, arrow:{w:28,h:14,tx:7,ty:7}, doublearrow:{w:26,h:14,tx:8,ty:7}, spring:{w:32,h:12,tx:6,ty:8},
+    parabola:{w:26,h:18,tx:8,ty:5}, sinewave:{w:32,h:14,tx:6,ty:7}, rect:{w:28,h:18,tx:8,ty:5}, triangle:{w:24,h:20,tx:10,ty:4},
+    circle:{w:20,h:20,tx:12,ty:4}, arc:{w:28,h:20,tx:8,ty:4},
+    prism:{w:30,h:22,tx:7,ty:3}, cylinder:{w:18,h:24,tx:13,ty:2},
+    battery:{w:32,h:16,tx:6,ty:6}, resistor:{w:32,h:14,tx:6,ty:7},
+    ldr:{w:32,h:26,tx:6,ty:1},
+    ammeter:{w:30,h:18,tx:7,ty:5}, voltmeter:{w:30,h:18,tx:7,ty:5}, lightbulb:{w:30,h:18,tx:7,ty:5},
+    toycar:{w:32,h:20,tx:6,ty:4}, balloon:{w:20,h:26,tx:12,ty:1}, rocket:{w:16,h:26,tx:14,ty:1},
+    airplane:{w:32,h:14,tx:6,ty:7}, microphone:{w:16,h:26,tx:14,ty:1},
+    beaker:{w:18,h:24,tx:13,ty:2}, dot:{w:14,h:14,tx:15,ty:7}, vectorfield:{w:20,h:20,tx:12,ty:4},
+    stickman:{w:16,h:26,tx:14,ty:1}, surface:{w:32,h:14,tx:6,ty:7},
+    sphere:{w:20,h:20,tx:12,ty:4}, wavepacket:{w:34,h:16,tx:5,ty:6}, axis:{w:20,h:20,tx:12,ty:4}
+  };
+
+  const SHAPE_LIST = [
+    ['line','Straight line'], ['arrow','Arrow'], ['doublearrow','Double-ended arrow'], ['spring','Spring / coil'], ['parabola','Parabola'],
+    ['sinewave','Sine wave'], ['rect','Rectangle'], ['triangle','Triangle'], ['circle','Circle / ellipse'], ['arc','Arc'],
+    ['prism','Rectangular prism'], ['cylinder','Cylinder'], ['sphere','Sphere'],
+    ['label','Text label (supports LaTeX)'],
+    ['dot','Point'], ['vectorfield','Vector/sign symbols'], ['surface','Surface (wall / floor / ceiling)'],
+    ['wavepacket','Wave packet'], ['axis','Axis symbol']
+  ];
+  const CIRCUIT_LIST = [
+    ['battery','Battery cell'], ['resistor','Resistor (EU)'],
+    ['ldr','Light-dependent resistor'], ['lightbulb','Light bulb (EU)'],
+    ['ammeter','Ammeter'], ['voltmeter','Voltmeter']
+  ];
+  const OBJECT_LIST = [
+    ['toycar','Toy car'], ['balloon','Balloon'], ['rocket','Rocket'],
+    ['microphone','Microphone'], ['airplane','Airplane'],
+    ['beaker','Beaker'], ['stickman','Stick figure']
+  ];
+
+
+  function toolbarIconHTML(type){
+    if(type === 'label') return `<span class="abc-icon">abc</span>`;
+    const c = ICON_CFG[type];
+    return `<svg viewBox="0 0 44 28"><g transform="translate(${c.tx},${c.ty})">${SHAPE_DEFS[type](c.w,c.h,2)}</g></svg>`;
+  }
+
+  /* ============================================================
+     LIGHTWEIGHT LATEX-STYLE FORMATTER
+     Supports ^{..} ^x  _{..} _x  \frac{..}{..}  \sqrt{..}
+     and common greek letters / symbols. Always renders in Arial.
+     ============================================================ */
+  const LATEX_CMDS = {
+    alpha:'α', beta:'β', gamma:'γ', delta:'δ', epsilon:'ε', varepsilon:'ε',
+    zeta:'ζ', eta:'η', theta:'θ', vartheta:'ϑ', iota:'ι', kappa:'κ',
+    lambda:'λ', mu:'μ', nu:'ν', xi:'ξ', pi:'π', rho:'ρ', sigma:'σ',
+    tau:'τ', upsilon:'υ', phi:'φ', varphi:'φ', chi:'χ', psi:'ψ', omega:'ω',
+    Gamma:'Γ', Delta:'Δ', Theta:'Θ', Lambda:'Λ', Xi:'Ξ', Pi:'Π',
+    Sigma:'Σ', Upsilon:'Υ', Phi:'Φ', Psi:'Ψ', Omega:'Ω',
+    times:'×', cdot:'·', pm:'±', mp:'∓', div:'÷', approx:'≈', neq:'≠',
+    leq:'≤', geq:'≥', infty:'∞', rightarrow:'→', leftarrow:'←',
+    circ:'°', degree:'°', perp:'⊥', parallel:'∥', propto:'∝',
+    hbar:'ℏ', partial:'∂', nabla:'∇', ohm:'Ω'
+  };
+
+  function escapeHTML(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function replaceLatexCommands(s){
+    const keys = Object.keys(LATEX_CMDS).sort((a,b)=>b.length-a.length);
+    const re = new RegExp('\\\\(' + keys.join('|') + ')(?![a-zA-Z])','g');
+    return s.replace(re, (m,p1)=>LATEX_CMDS[p1]);
+  }
+
+  function extractBraced(str, openIdx){
+    let depth = 0;
+    for(let i=openIdx;i<str.length;i++){
+      if(str[i]==='{') depth++;
+      else if(str[i]==='}'){ depth--; if(depth===0) return i; }
+    }
+    return -1;
+  }
+
+  function applySupSub(s){
+    s = s.replace(/\^\{([^{}]*)\}/g, '<sup>$1</sup>');
+    s = s.replace(/_\{([^{}]*)\}/g, '<sub>$1</sub>');
+    s = s.replace(/\^([^\s{}\\])/g, '<sup>$1</sup>');
+    s = s.replace(/_([^\s{}\\])/g, '<sub>$1</sub>');
+    return s;
+  }
+
+  function processFracAndSqrt(s){
+    let out = '';
+    for(let i=0;i<s.length;i++){
+      if(s.startsWith('\\frac{', i)){
+        const numOpen = i+5;
+        const numClose = extractBraced(s, numOpen);
+        if(numClose>-1 && s[numClose+1]==='{'){
+          const denOpen = numClose+1;
+          const denClose = extractBraced(s, denOpen);
+          if(denClose>-1){
+            const num = applySupSub(s.slice(numOpen+1, numClose));
+            const den = applySupSub(s.slice(denOpen+1, denClose));
+            out += `<span class="frac"><span class="fnum">${num}</span><span class="fden">${den}</span></span>`;
+            i = denClose;
+            continue;
+          }
+        }
+      }
+      if(s.startsWith('\\sqrt{', i)){
+        const open = i+5;
+        const close = extractBraced(s, open);
+        if(close>-1){
+          const inner = applySupSub(s.slice(open+1, close));
+          out += `√<span style="text-decoration:overline;">${inner}</span>`;
+          i = close;
+          continue;
+        }
+      }
+      out += s[i];
+    }
+    return out;
+  }
+
+  function latexLiteToHTML(raw){
+    let s = escapeHTML(raw);
+    s = s.replace(/\\_/g,'\u00A7UND\u00A7').replace(/\\\^/g,'\u00A7CAR\u00A7');
+    s = replaceLatexCommands(s);
+    s = s.replace(/\\,|\\:|\\;/g,'\u2009').replace(/\\!/g,'');
+    s = processFracAndSqrt(s);
+    s = applySupSub(s);
+    s = s.replace(/\u00A7UND\u00A7/g,'_').replace(/\u00A7CAR\u00A7/g,'^');
+    return s;
+  }
+
+  /* ============================================================
+     STATE
+     ============================================================ */
+  let shapes = [];
+  let selectedId = null;
+  let editingId = null;
+  let idCounter = 0;
+  let currentStrokeWidth = 2;
+  let currentFontSize = 20;
+  let gridMode = 'show'; // 'hide' | 'show' | 'enforce'
+  let exportRect = null; // { x, y, w, h } in canvas coords — the region Save PNG will crop to
+
+  const svg = document.getElementById('canvas');
+  const shapesLayer = document.getElementById('shapesLayer');
+  const handlesLayer = document.getElementById('handlesLayer');
+  const exportRectLayer = document.getElementById('exportRectLayer');
+  const canvasWrap = document.getElementById('canvasWrap');
+  const floatToolbar = document.getElementById('floatToolbar');
+  const thicknessInput = document.getElementById('thickness');
+  const thicknessVal = document.getElementById('thicknessVal');
+  const gridSeg = document.getElementById('gridSeg');
+
+  const ACCENT = '#3568d4';
+  const YELLOW = '#f5c518';
+  const GRID_SIZE = 24;
+  const FILL_CYCLE = ['none', '#ffffff', '#cccccc'];
+  const RECT_FILL_CYCLE = ['none', '#ffffff', '#cccccc', 'url(#rectGradient)'];
+
+  function snapVal(v){ return Math.round(v/GRID_SIZE)*GRID_SIZE; }
+
+  function snapShapeBox(s){
+    if(gridMode !== 'enforce') return;
+    const x2 = s.x+s.w, y2 = s.y+s.h;
+    s.x = snapVal(s.x); s.y = snapVal(s.y);
+    s.w = Math.max(14, snapVal(x2)-s.x);
+    s.h = Math.max(14, snapVal(y2)-s.y);
+  }
+
+  // For a point, the visible feature is its center, not a corner — so
+  // snap the center to a grid intersection instead of the bounding box.
+  function snapCenterBox(s){
+    if(gridMode !== 'enforce') return;
+    const cx = snapVal(s.x + s.w/2), cy = snapVal(s.y + s.h/2);
+    s.x = cx - s.w/2; s.y = cy - s.h/2;
+  }
+
+  function snapPoint(p){
+    if(gridMode !== 'enforce') return p;
+    return { x: snapVal(p.x), y: snapVal(p.y) };
+  }
+
+  function applyGridMode(){
+    canvasWrap.classList.remove('grid-hidden','grid-enforce');
+    if(gridMode === 'hide') canvasWrap.classList.add('grid-hidden');
+    else if(gridMode === 'enforce') canvasWrap.classList.add('grid-enforce');
+    gridSeg.querySelectorAll('button').forEach(b=>{
+      b.classList.toggle('active', b.dataset.mode === gridMode);
+    });
+  }
+  gridSeg.addEventListener('click', function(e){
+    const btn = e.target.closest('button'); if(!btn) return;
+    gridMode = btn.dataset.mode;
+    applyGridMode();
+  });
+
+  function getSelected(){ return shapes.find(s=>s.id===selectedId) || null; }
+
+  /* ============================================================
+     TRANSFORM HELPERS
+     ============================================================ */
+  function groupTransform(s){
+    return `translate(${s.x+s.w/2},${s.y+s.h/2}) rotate(${s.rot}) scale(${s.flipH},${s.flipV}) translate(${-s.w/2},${-s.h/2})`;
+  }
+
+  function localToCanvas(px,py,s){
+    let lx = px - s.w/2, ly = py - s.h/2;
+    lx *= s.flipH; ly *= s.flipV;
+    const rad = s.rot*Math.PI/180;
+    const rx = lx*Math.cos(rad) - ly*Math.sin(rad);
+    const ry = lx*Math.sin(rad) + ly*Math.cos(rad);
+    return { x: s.x+s.w/2+rx, y: s.y+s.h/2+ry };
+  }
+
+  function screenDeltaToLocal(dx,dy,rot,flipH,flipV){
+    const rad = rot*Math.PI/180;
+    const rx = dx*Math.cos(rad) + dy*Math.sin(rad);
+    const ry = -dx*Math.sin(rad) + dy*Math.cos(rad);
+    return [rx*flipH, ry*flipV];
+  }
+
+  // Inverse of localToCanvas: maps a canvas-space point back into the
+  // shape's local (0,0)-(w,h) box, accounting for rotation and flip.
+  function canvasToLocal(X,Y,s){
+    const rx = X-(s.x+s.w/2), ry = Y-(s.y+s.h/2);
+    const rad = s.rot*Math.PI/180;
+    const lxF = rx*Math.cos(rad) + ry*Math.sin(rad);
+    const lyF = -rx*Math.sin(rad) + ry*Math.cos(rad);
+    return { x: lxF*s.flipH + s.w/2, y: lyF*s.flipV + s.h/2 };
+  }
+
+  function toCanvasCoords(e){
+    const r = svg.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  /* ============================================================
+     RENDER
+     ============================================================ */
+  function shapeContent(s){
+    if(s.type === 'label'){
+      const fs = s.fontSize || 20;
+      if(s.id === editingId){
+        return `<foreignObject x="0" y="0" width="${s.w}" height="${s.h}" overflow="visible">
+          <textarea xmlns="http://www.w3.org/1999/xhtml" class="label-edit" style="font-size:${fs}pt;"
+            onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()"
+            onkeydown="window.__labelKeydown(event, ${s.id})"
+            onblur="window.__labelBlur(${s.id}, this.value)">${escapeHTML(s.text)}</textarea>
+        </foreignObject>`;
+      }
+      return `<foreignObject x="0" y="0" width="${s.w}" height="${s.h}" overflow="visible">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="label-text" style="font-size:${fs}pt;">${latexLiteToHTML(s.text)}</div>
+      </foreignObject>`;
+    }
+    if(s.type === 'prism') return drawPrism(s.w, s.h, s.sw, s.frontRatioW, s.frontRatioH, s.fill);
+    if(s.type === 'cylinder') return drawCylinder(s.w, s.h, s.sw, s.ellipseRatio, s.fill);
+    if(s.type === 'arc') return drawArc(s.w, s.h, s.sw, s.arcAngle, s.fill, s.lineStyle, s.arcArrow);
+    if(s.type === 'rect') return drawRect(s.w, s.h, s.sw, s.fill, s.lineStyle);
+    if(s.type === 'circle') return drawCircle(s.w, s.h, s.sw, s.fill, s.lineStyle);
+    if(s.type === 'triangle') return drawTriangle(s.w, s.h, s.sw, s.fill, s.lineStyle, s.pts);
+    if(s.type === 'sphere') return drawSphere(s.w, s.h, s.sw, s.fill);
+    if(s.type === 'beaker') return drawBeaker(s.w, s.h, s.sw, s.waterLevel);
+    if(s.type === 'dot') return drawDot(s.w, s.h, s.sw, s.dotFill);
+    if(s.type === 'vectorfield') return drawVectorField(s.w, s.h, s.sw, s.vfMode);
+    if(s.type === 'line') return drawLine(s.w, s.h, s.sw, s.lineStyle);
+    if(s.type === 'arrow') return drawArrow(s.w, s.h, s.sw, s.lineStyle);
+    if(s.type === 'doublearrow') return drawDoubleArrow(s.w, s.h, s.sw, s.lineStyle);
+    if(s.type === 'parabola') return drawParabola(s.w, s.h, s.sw, s.lineStyle);
+    if(s.type === 'sinewave') return drawSineWave(s.w, s.h, s.sw, s.lineStyle);
+    return SHAPE_DEFS[s.type](s.w, s.h, s.sw);
+  }
+
+  function render(){
+    shapesLayer.innerHTML = shapes.map(s => `
+      <g class="shape-g" data-id="${s.id}" transform="${groupTransform(s)}">
+        <rect class="hit-rect" x="-4" y="-4" width="${s.w+8}" height="${s.h+8}" fill="rgba(0,0,0,0.001)" pointer-events="all"></rect>
+        ${shapeContent(s)}
+      </g>`).join('');
+
+    const s = getSelected();
+    if(s){
+      const t = groupTransform(s);
+      const hs = 7;
+      if(LINEAR_TYPES.includes(s.type)){
+        handlesLayer.innerHTML = `
+          <g transform="${t}">
+            <circle class="handle" data-handle="p1" cx="0" cy="${s.h/2}" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            <circle class="handle" data-handle="p2" cx="${s.w}" cy="${s.h/2}" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+          </g>`;
+      } else if(POINT_TYPES.includes(s.type)){
+        // A point-like shape has no meaningful resize/rotate; show a
+        // subtle ring instead of a bounding box.
+        const dotR = s.type === 'vectorfield' ? s.sw*2.2 : s.sw*2;
+        handlesLayer.innerHTML = `
+          <g transform="${t}">
+            <circle cx="${s.w/2}" cy="${s.h/2}" r="${dotR+6}" fill="none" stroke="${ACCENT}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" pointer-events="none"/>
+          </g>`;
+      } else if(s.type === 'triangle'){
+        const pts = s.pts || defaultTrianglePts(s.w, s.h);
+        const vertexHandles = pts.map((p,i)=>`<circle class="handle" data-handle="vertex${i}" cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>`).join('');
+        handlesLayer.innerHTML = `
+          <g transform="${t}">
+            <line x1="${s.w/2}" y1="0" x2="${s.w/2}" y2="-30" stroke="${ACCENT}" stroke-width="1.5" vector-effect="non-scaling-stroke" pointer-events="none"/>
+            <circle class="handle" data-handle="rot" cx="${s.w/2}" cy="-30" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            ${vertexHandles}
+          </g>`;
+      } else {
+        let aux = '';
+        if(s.type === 'prism'){
+          const fw = s.w*(s.frontRatioW||0.72), fh = s.h*(s.frontRatioH||0.76);
+          aux = `
+            <circle class="handle" data-handle="frontW" cx="${fw}" cy="${s.h}" r="7" fill="${YELLOW}" stroke="#7a5d00" stroke-width="2"/>
+            <circle class="handle" data-handle="frontH" cx="0" cy="${s.h-fh}" r="7" fill="${YELLOW}" stroke="#7a5d00" stroke-width="2"/>`;
+        } else if(s.type === 'cylinder'){
+          const ry = Math.max(s.h*(s.ellipseRatio||0.14), 6);
+          aux = `<circle class="handle" data-handle="cylTop" cx="${s.w/2}" cy="${2*ry}" r="7" fill="${YELLOW}" stroke="#7a5d00" stroke-width="2"/>`;
+        } else if(s.type === 'arc'){
+          const arcAngle = s.arcAngle||90;
+          const rad = arcAngle*Math.PI/180;
+          const xB = s.w*(1-Math.cos(rad)), yB = s.h*(1-Math.sin(rad));
+          aux = `<circle class="handle" data-handle="arcAngle" cx="${xB.toFixed(2)}" cy="${yB.toFixed(2)}" r="7" fill="${YELLOW}" stroke="#7a5d00" stroke-width="2"/>`;
+        } else if(s.type === 'beaker'){
+          const wl = s.waterLevel==null ? 0.5 : s.waterLevel;
+          const bt=0.12*s.h, bb=0.92*s.h;
+          const waterY = bb - wl*(bb-bt);
+          aux = `<circle class="handle" data-handle="waterLevel" cx="${s.w/2}" cy="${waterY.toFixed(2)}" r="7" fill="${YELLOW}" stroke="#7a5d00" stroke-width="2"/>`;
+        }
+        handlesLayer.innerHTML = `
+          <g transform="${t}">
+            <rect x="0" y="0" width="${s.w}" height="${s.h}" fill="none" stroke="${ACCENT}" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" pointer-events="none"/>
+            <line x1="${s.w/2}" y1="0" x2="${s.w/2}" y2="-30" stroke="${ACCENT}" stroke-width="1.5" vector-effect="non-scaling-stroke" pointer-events="none"/>
+            <circle class="handle" data-handle="rot" cx="${s.w/2}" cy="-30" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            <circle class="handle" data-handle="nw" cx="0" cy="0" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            <circle class="handle" data-handle="ne" cx="${s.w}" cy="0" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            <circle class="handle" data-handle="sw" cx="0" cy="${s.h}" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            <circle class="handle" data-handle="se" cx="${s.w}" cy="${s.h}" r="${hs}" fill="#fff" stroke="${ACCENT}" stroke-width="2.2"/>
+            ${aux}
+          </g>`;
+      }
+      updateFloatToolbar(s);
+    } else {
+      handlesLayer.innerHTML = '';
+      floatToolbar.classList.add('hidden');
+    }
+
+    if(editingId != null){
+      const ta = shapesLayer.querySelector('.label-edit');
+      if(ta){ ta.focus(); ta.select(); }
+    }
+  }
+
+  function updateFloatToolbar(s){
+    const corners = [
+      localToCanvas(0,0,s), localToCanvas(s.w,0,s),
+      localToCanvas(s.w,s.h,s), localToCanvas(0,s.h,s)
+    ];
+    const maxX = Math.max(...corners.map(c=>c.x));
+    const minY = Math.min(...corners.map(c=>c.y));
+
+    let html = '';
+    if(s.type === 'label'){
+      html += `<button data-action="edit" title="Edit text">✎</button><div class="fsep"></div>`;
+    } else if(POINT_TYPES.includes(s.type)){
+      // a plain point/vector symbol: no flip needed
+    } else if(!LINEAR_TYPES.includes(s.type)){
+      html += `<button data-action="flipH" title="Flip horizontal">⇋</button><button data-action="flipV" title="Flip vertical">⇵</button><div class="fsep"></div>`;
+    }
+    if(s.type === 'dot'){
+      const DOT_COLORS = ['#151515','#ffffff','#cccccc'];
+      const cur = s.dotFill || '#151515';
+      const idx = DOT_COLORS.indexOf(cur);
+      const nextColor = DOT_COLORS[(idx+1) % DOT_COLORS.length];
+      const nextName = nextColor === '#151515' ? 'black' : (nextColor === '#ffffff' ? 'white' : 'grey');
+      html += `<button data-action="toggleDotFill" title="Fill ${nextName}"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:1.5px solid #9aa3b8;background:${cur};vertical-align:middle;"></span></button><div class="fsep"></div>`;
+    }
+    if(s.type === 'vectorfield'){
+      const VF_MODES = ['out','in','plus','minus'];
+      const VF_ICONS = {out:'⊙', in:'⊗', plus:'⊕', minus:'⊖'};
+      const cur = s.vfMode || 'out';
+      html += `<button data-action="toggleVF" title="Switch symbol">${VF_ICONS[cur]}</button><div class="fsep"></div>`;
+    }
+    if(s.type === 'arc'){
+      html += `<button data-action="toggleArcArrow" title="${s.arcArrow?'Remove arrowhead':'Add arrowhead'}">${s.arcArrow?'⌐▼':'▼'}</button><div class="fsep"></div>`;
+    }
+    if(DASHABLE_TYPES.includes(s.type)){
+      const cur = s.lineStyle || 'solid';
+      const icons = {solid:'─', dashed:'╌', white:'∅'};
+      const next = cur === 'solid' ? 'dashed' : (cur === 'dashed' ? 'white' : 'solid');
+      html += `<button data-action="toggleDash" title="Switch to ${next}">${icons[cur]}</button><div class="fsep"></div>`;
+    }
+    if(FILLABLE_TYPES.includes(s.type)){
+      const cycle = s.type === 'rect' ? RECT_FILL_CYCLE : FILL_CYCLE;
+      const cur = s.fill || 'none';
+      const idx = cycle.indexOf(cur);
+      const swatch = cur === 'none' ? 'transparent' : (cur.indexOf('url(') === 0 ? 'linear-gradient(to right, #fff, #ccc)' : cur);
+      const next = cycle[(idx+1) % cycle.length];
+      const nextTitle = next === 'none' ? 'Remove fill' : (next === '#ffffff' ? 'Fill white' : (next === '#cccccc' ? 'Fill grey' : 'Fill gradient'));
+      html += `<button data-action="toggleFill" title="${nextTitle}"><span style="display:inline-block;width:13px;height:13px;border:1.5px solid #9aa3b8;background:${swatch};vertical-align:middle;"></span></button><div class="fsep"></div>`;
+    }
+    html += `<button data-action="raise" title="Bring forward">▲</button><button data-action="lower" title="Send backward">▼</button><div class="fsep"></div>`;
+    html += `<button data-action="delete" class="danger" title="Delete">✕</button>`;
+
+    floatToolbar.innerHTML = html;
+    floatToolbar.classList.remove('hidden');
+    // Positioned above and to the right of the shape's bounding box so it
+    // never sits over the rotation handle, which is at top-center.
+    const wrapW = canvasWrap.clientWidth;
+    let leftPos = maxX + 10;
+    if(leftPos > wrapW - 230) leftPos = Math.max(wrapW - 230, 4);
+    floatToolbar.style.left = leftPos + 'px';
+    floatToolbar.style.top = Math.max(minY - 10, 34) + 'px';
+  }
+
+  function updateSizeControlUI(){
+    const s = getSelected();
+    if(s && s.type === 'label'){
+      thicknessInput.min = 10; thicknessInput.max = 60; thicknessInput.step = 5;
+      thicknessInput.value = s.fontSize || 20;
+      thicknessVal.textContent = (s.fontSize||20) + 'pt';
+    } else {
+      thicknessInput.min = 1; thicknessInput.max = 10; thicknessInput.step = 1;
+      const val = s ? s.sw : currentStrokeWidth;
+      thicknessInput.value = val;
+      thicknessVal.textContent = val + 'px';
+    }
+  }
+
+  function selectShape(id){
+    selectedId = id;
+    updateSizeControlUI();
+    render();
+  }
+  function deselect(){
+    selectedId = null; editingId = null;
+    updateSizeControlUI();
+    render();
+  }
+
+  function addShape(type, x, y, w, h){
+    const id = ++idCounter;
+    const shape = { id, type, x, y, w, h, rot:0, flipH:1, flipV:1, sw: currentStrokeWidth };
+    if(type === 'label'){ shape.text = 'Label'; shape.fontSize = currentFontSize; }
+    if(type === 'prism'){ shape.frontRatioW = 0.72; shape.frontRatioH = 0.76; }
+    if(type === 'cylinder'){ shape.ellipseRatio = 0.14; }
+    if(type === 'arc'){ shape.arcAngle = 90; shape.arcArrow = false; }
+    if(type === 'beaker'){ shape.waterLevel = 0.5; }
+    if(type === 'dot'){ shape.dotFill = '#151515'; }
+    if(type === 'vectorfield'){ shape.vfMode = 'out'; }
+    if(DASHABLE_TYPES.includes(type)){ shape.lineStyle = 'solid'; }
+    if(FILLABLE_TYPES.includes(type)){ shape.fill = 'none'; }
+    if(POINT_TYPES.includes(type)) snapCenterBox(shape); else snapShapeBox(shape);
+    // Set default triangle vertices AFTER snapping, so they match the
+    // shape's final (possibly grid-snapped) width/height.
+    if(type === 'triangle'){ shape.pts = defaultTrianglePts(shape.w, shape.h); }
+    shapes.push(shape);
+    selectShape(id);
+    if(type === 'label') enterLabelEdit(id);
+  }
+
+  /* ============================================================
+     LABEL EDITING
+     ============================================================ */
+  function enterLabelEdit(id){
+    editingId = id;
+    render();
+  }
+  window.__labelBlur = function(id, val){
+    const s = shapes.find(sh=>sh.id===id);
+    if(s) s.text = val;
+    if(editingId === id) editingId = null;
+    render();
+  };
+  window.__labelKeydown = function(ev, id){
+    ev.stopPropagation();
+    if(ev.key === 'Escape'){ ev.preventDefault(); editingId = null; render(); }
+  };
+
+  /* ============================================================
+     LAYER ORDER
+     ============================================================ */
+  function raiseLayer(id){
+    const idx = shapes.findIndex(sh=>sh.id===id);
+    if(idx < 0 || idx === shapes.length-1) return;
+    const tmp = shapes[idx]; shapes[idx] = shapes[idx+1]; shapes[idx+1] = tmp;
+    render();
+  }
+  function lowerLayer(id){
+    const idx = shapes.findIndex(sh=>sh.id===id);
+    if(idx <= 0) return;
+    const tmp = shapes[idx]; shapes[idx] = shapes[idx-1]; shapes[idx-1] = tmp;
+    render();
+  }
+
+  /* ============================================================
+     RESIZE MATH (2-D shapes: 4 corner handles)
+     ============================================================ */
+  function applyResize(handle, s0, ldx, ldy, shiftKey){
+    let {x,y,w,h} = s0;
+    let nx=x, ny=y, nw=w, nh=h;
+    switch(handle){
+      case 'se': nw = w+ldx; nh = h+ldy; break;
+      case 'nw': nw = w-ldx; nh = h-ldy; nx = x+ldx; ny = y+ldy; break;
+      case 'ne': nw = w+ldx; nh = h-ldy; ny = y+ldy; break;
+      case 'sw': nw = w-ldx; nh = h+ldy; nx = x+ldx; break;
+    }
+    if(shiftKey){
+      const scaleW = nw/w, scaleH = nh/h;
+      const scale = Math.abs(scaleW-1) > Math.abs(scaleH-1) ? scaleW : scaleH;
+      nw = w*scale; nh = h*scale;
+      if(handle==='nw'){ nx = x+(w-nw); ny = y+(h-nh); }
+      else if(handle==='ne'){ nx = x; ny = y+(h-nh); }
+      else if(handle==='sw'){ nx = x+(w-nw); ny = y; }
+      else { nx = x; ny = y; }
+    }
+    const MIN = 14;
+    if(nw < MIN){ if(handle==='nw'||handle==='sw') nx -= (MIN-nw); nw = MIN; }
+    if(nh < MIN){ if(handle==='nw'||handle==='ne') ny -= (MIN-nh); nh = MIN; }
+    return {x:nx,y:ny,w:nw,h:nh};
+  }
+
+  /* ============================================================
+     ENDPOINT MATH (1-D shapes: 2 endpoint handles)
+     ============================================================ */
+  function endpointDragUpdate(handle, F, D, h, shiftKey){
+    const MIN_LEN = 16;
+    let dx, dy, sign;
+    if(handle === 'p2'){ dx = D.x-F.x; dy = D.y-F.y; sign = 1; }
+    else { dx = F.x-D.x; dy = F.y-D.y; sign = -1; }
+    let rot = Math.atan2(dy,dx)*180/Math.PI;
+    const neww = Math.max(MIN_LEN, Math.hypot(dx,dy));
+    if(shiftKey) rot = Math.round(rot/15)*15;
+    const rad = rot*Math.PI/180;
+    const cx = F.x + sign*(neww/2)*Math.cos(rad);
+    const cy = F.y + sign*(neww/2)*Math.sin(rad);
+    return { x: cx-neww/2, y: cy-h/2, w: neww, rot };
+  }
+
+  /* ============================================================
+     POINTER INTERACTIONS
+     ============================================================ */
+  function bindToolbarDrag(btn, type){
+    btn.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      const ghost = document.createElement('div');
+      ghost.className = 'ghost-shape';
+      ghost.innerHTML = toolbarIconHTML(type);
+      document.body.appendChild(ghost);
+      const move = (ev)=>{ ghost.style.left = ev.clientX+'px'; ghost.style.top = ev.clientY+'px'; };
+      move(e);
+      btn.setPointerCapture(e.pointerId);
+
+      function up(ev){
+        cleanup();
+        const r = svg.getBoundingClientRect();
+        if(ev.clientX>=r.left && ev.clientX<=r.right && ev.clientY>=r.top && ev.clientY<=r.bottom){
+          const def = DEFAULT_SIZE[type];
+          const cx = ev.clientX - r.left, cy = ev.clientY - r.top;
+          addShape(type, cx-def.w/2, cy-def.h/2, def.w, def.h);
+        }
+      }
+      function cancel(){ cleanup(); }
+      function cleanup(){
+        ghost.remove();
+        btn.removeEventListener('pointermove', move);
+        btn.removeEventListener('pointerup', up);
+        btn.removeEventListener('pointercancel', cancel);
+        try{ btn.releasePointerCapture(e.pointerId); }catch(err){}
+        closeAllDropdowns();
+      }
+      btn.addEventListener('pointermove', move);
+      btn.addEventListener('pointerup', up);
+      btn.addEventListener('pointercancel', cancel);
+    });
+  }
+
+  function closeAllDropdowns(){
+    document.querySelectorAll('.dropdown-panel').forEach(p=>p.classList.add('hidden'));
+  }
+
+  function setupDropdown(triggerId, panelId){
+    const trigger = document.getElementById(triggerId);
+    const panel = document.getElementById(panelId);
+    trigger.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      const wasHidden = panel.classList.contains('hidden');
+      closeAllDropdowns();
+      if(wasHidden){
+        const r = trigger.getBoundingClientRect();
+        const panelWidth = 224;
+        let leftPos = r.right - panelWidth;
+        if(leftPos < 4) leftPos = 4;
+        panel.style.left = leftPos + 'px';
+        panel.style.top = (r.bottom + 8) + 'px';
+        panel.classList.remove('hidden');
+      }
+    });
+    panel.addEventListener('pointerdown', e=>e.stopPropagation());
+    return panel;
+  }
+  document.addEventListener('pointerdown', closeAllDropdowns);
+
+  function buildToolbar(){
+    const shapeWrap = document.getElementById('shapeIcons');
+    SHAPE_LIST.forEach(([type,label])=>{
+      const btn = document.createElement('div');
+      btn.className = 'shape-btn';
+      btn.title = label;
+      btn.innerHTML = toolbarIconHTML(type);
+      shapeWrap.appendChild(btn);
+      bindToolbarDrag(btn, type);
+    });
+
+    const circuitPanel = setupDropdown('circuitTrigger','circuitPanel');
+    CIRCUIT_LIST.forEach(([type,label])=>{
+      const btn = document.createElement('div');
+      btn.className = 'circuit-btn';
+      btn.title = label;
+      btn.innerHTML = toolbarIconHTML(type);
+      circuitPanel.appendChild(btn);
+      bindToolbarDrag(btn, type);
+    });
+
+    const objectsPanel = setupDropdown('objectsTrigger','objectsPanel');
+    OBJECT_LIST.forEach(([type,label])=>{
+      const btn = document.createElement('div');
+      btn.className = 'circuit-btn';
+      btn.title = label;
+      btn.innerHTML = toolbarIconHTML(type);
+      objectsPanel.appendChild(btn);
+      bindToolbarDrag(btn, type);
+    });
+  }
+
+  svg.addEventListener('pointerdown', function(e){
+    const handleEl = e.target.closest('.handle');
+    if(handleEl){
+      const h = handleEl.dataset.handle;
+      if(h === 'p1' || h === 'p2') startEndpointDrag(h, e);
+      else if(h === 'frontW' || h === 'frontH' || h === 'cylTop' || h === 'arcAngle' || h === 'waterLevel') startAuxHandleDrag(h, e);
+      else if(h.indexOf('vertex') === 0) startVertexDrag(+h.slice(6), e);
+      else if(h.indexOf('export') === 0) startExportRectDrag(h, e);
+      else startHandleDrag(h, e);
+      return;
+    }
+    const shapeEl = e.target.closest('.shape-g');
+    if(shapeEl){
+      const id = +shapeEl.dataset.id;
+      selectShape(id);
+      startMoveDrag(e);
+      return;
+    }
+    deselect();
+  });
+
+  svg.addEventListener('dblclick', function(e){
+    const shapeEl = e.target.closest('.shape-g');
+    if(!shapeEl) return;
+    const id = +shapeEl.dataset.id;
+    const s = shapes.find(sh=>sh.id===id);
+    if(!s) return;
+    if(s.type === 'label'){ selectShape(id); enterLabelEdit(id); }
+  });
+
+  function startMoveDrag(e){
+    e.preventDefault();
+    const s0 = { ...getSelected() };
+    const start = toCanvasCoords(e);
+    svg.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const cur = toCanvasCoords(ev);
+      const s = getSelected(); if(!s) return;
+      s.x = s0.x + (cur.x - start.x);
+      s.y = s0.y + (cur.y - start.y);
+      if(gridMode === 'enforce'){
+        if(POINT_TYPES.includes(s.type)) snapCenterBox(s);
+        else { s.x = snapVal(s.x); s.y = snapVal(s.y); }
+      }
+      render();
+    }
+    function up(){ cleanup(); }
+    function cleanup(){
+      svg.removeEventListener('pointermove', move);
+      svg.removeEventListener('pointerup', up);
+      svg.removeEventListener('pointercancel', cleanup);
+      try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+    }
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', cleanup);
+  }
+
+  function startHandleDrag(handle, e){
+    e.preventDefault(); e.stopPropagation();
+    const s0 = { ...getSelected() };
+    const start = toCanvasCoords(e);
+    svg.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const s = getSelected(); if(!s) return;
+      const cur = toCanvasCoords(ev);
+      const dx = cur.x - start.x, dy = cur.y - start.y;
+
+      if(handle === 'rot'){
+        const cx = s0.x + s0.w/2, cy = s0.y + s0.h/2;
+        let angle = Math.atan2(cur.y-cy, cur.x-cx) * 180/Math.PI + 90;
+        if(ev.shiftKey) angle = Math.round(angle/15)*15;
+        s.rot = angle;
+      } else {
+        const [ldx,ldy] = screenDeltaToLocal(dx,dy,s0.rot,s0.flipH,s0.flipV);
+        const r = applyResize(handle, s0, ldx, ldy, ev.shiftKey);
+        s.x=r.x; s.y=r.y; s.w=r.w; s.h=r.h;
+        if(gridMode === 'enforce') snapShapeBox(s);
+      }
+      render();
+    }
+    function up(){ cleanup(); }
+    function cleanup(){
+      svg.removeEventListener('pointermove', move);
+      svg.removeEventListener('pointerup', up);
+      svg.removeEventListener('pointercancel', cleanup);
+      try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+    }
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', cleanup);
+  }
+
+  function startEndpointDrag(handle, e){
+    e.preventDefault(); e.stopPropagation();
+    const s0 = { ...getSelected() };
+    const otherLocalX = handle === 'p1' ? s0.w : 0;
+    // Snap the fixed (non-dragged) endpoint too, so that once either end
+    // of a linear element is touched, the whole thing becomes grid-aligned
+    // rather than leaving the other end at its old, possibly off-grid spot.
+    const F = snapPoint(localToCanvas(otherLocalX, s0.h/2, s0));
+    svg.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const s = getSelected(); if(!s) return;
+      const D = snapPoint(toCanvasCoords(ev));
+      const r = endpointDragUpdate(handle, F, D, s0.h, ev.shiftKey);
+      s.x=r.x; s.y=r.y; s.w=r.w; s.rot=r.rot;
+      render();
+    }
+    function up(){ cleanup(); }
+    function cleanup(){
+      svg.removeEventListener('pointermove', move);
+      svg.removeEventListener('pointerup', up);
+      svg.removeEventListener('pointercancel', cleanup);
+      try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+    }
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', cleanup);
+  }
+
+  function startAuxHandleDrag(handle, e){
+    e.preventDefault(); e.stopPropagation();
+    const s0 = { ...getSelected() };
+    const start = toCanvasCoords(e);
+    svg.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const s = getSelected(); if(!s) return;
+      const cur = toCanvasCoords(ev);
+      const dx = cur.x - start.x, dy = cur.y - start.y;
+      const [ldx,ldy] = screenDeltaToLocal(dx,dy,s0.rot,s0.flipH,s0.flipV);
+
+      if(handle === 'frontW'){
+        let fw = s0.w*(s0.frontRatioW||0.72) + ldx;
+        fw = Math.min(Math.max(fw, 16), s0.w*0.98);
+        s.frontRatioW = fw/s0.w;
+      } else if(handle === 'frontH'){
+        let fy0 = (s0.h - s0.h*(s0.frontRatioH||0.76)) + ldy;
+        fy0 = Math.min(Math.max(fy0, 0), s0.h-16);
+        s.frontRatioH = (s0.h - fy0)/s0.h;
+      } else if(handle === 'cylTop'){
+        let ry = Math.max(s0.h*(s0.ellipseRatio||0.14), 6) + ldy/2;
+        ry = Math.min(Math.max(ry, 5), s0.h*0.45);
+        s.ellipseRatio = ry/s0.h;
+      } else if(handle === 'arcAngle'){
+        // Project the cursor onto the actual rendered arc curve so the
+        // handle always slides exactly along it.
+        const cur = toCanvasCoords(ev);
+        let bestDeg = 0, bestDist = Infinity;
+        for(let deg=0; deg<=90; deg++){
+          const rad = deg*Math.PI/180;
+          const lx = s0.w*(1-Math.cos(rad)), ly = s0.h*(1-Math.sin(rad));
+          const pt = localToCanvas(lx, ly, s0);
+          const dist = (pt.x-cur.x)*(pt.x-cur.x) + (pt.y-cur.y)*(pt.y-cur.y);
+          if(dist < bestDist){ bestDist = dist; bestDeg = deg; }
+        }
+        s.arcAngle = Math.min(Math.max(bestDeg, 5), 90);
+      } else if(handle === 'waterLevel'){
+        const bt0 = 0.12*s0.h, bb0 = 0.92*s0.h;
+        const wl0 = s0.waterLevel==null ? 0.5 : s0.waterLevel;
+        let waterY = (bb0 - wl0*(bb0-bt0)) + ldy;
+        waterY = Math.min(Math.max(waterY, bt0), bb0);
+        s.waterLevel = (bb0-waterY)/(bb0-bt0);
+      }
+      render();
+    }
+    function up(){ cleanup(); }
+    function cleanup(){
+      svg.removeEventListener('pointermove', move);
+      svg.removeEventListener('pointerup', up);
+      svg.removeEventListener('pointercancel', cleanup);
+      try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+    }
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', cleanup);
+  }
+
+  function startVertexDrag(idx, e){
+    e.preventDefault(); e.stopPropagation();
+    const live0 = getSelected();
+    const s0 = { ...live0, pts: live0.pts.map(p=>({...p})) };
+    const start = toCanvasCoords(e);
+    svg.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const s = getSelected(); if(!s) return;
+      const cur = toCanvasCoords(ev);
+      const dx = cur.x - start.x, dy = cur.y - start.y;
+      const [ldx,ldy] = screenDeltaToLocal(dx,dy,s0.rot,s0.flipH,s0.flipV);
+      const newPts = s0.pts.map(p=>({...p}));
+      newPts[idx] = { x: s0.pts[idx].x + ldx, y: s0.pts[idx].y + ldy };
+      s.pts = newPts;
+      render();
+    }
+    function up(){ cleanup(); }
+    function cleanup(){
+      svg.removeEventListener('pointermove', move);
+      svg.removeEventListener('pointerup', up);
+      svg.removeEventListener('pointercancel', cleanup);
+      try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+    }
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', cleanup);
+  }
+
+  /* ============================================================
+     FLOATING TOOLBAR ACTIONS
+     ============================================================ */
+  floatToolbar.addEventListener('pointerdown', e=>e.stopPropagation());
+  floatToolbar.addEventListener('click', function(e){
+    const btn = e.target.closest('button'); if(!btn) return;
+    const s = getSelected(); if(!s) return;
+    const action = btn.dataset.action;
+    if(action === 'flipH') s.flipH *= -1;
+    else if(action === 'flipV') s.flipV *= -1;
+    else if(action === 'edit'){ enterLabelEdit(s.id); return; }
+    else if(action === 'toggleFill'){
+      const cycle = s.type === 'rect' ? RECT_FILL_CYCLE : FILL_CYCLE;
+      const idx = cycle.indexOf(s.fill || 'none');
+      s.fill = cycle[(idx+1) % cycle.length];
+    }
+    else if(action === 'toggleDotFill'){
+      const DOT_COLORS = ['#151515','#ffffff','#cccccc'];
+      const idx = DOT_COLORS.indexOf(s.dotFill || '#151515');
+      s.dotFill = DOT_COLORS[(idx+1) % DOT_COLORS.length];
+    }
+    else if(action === 'toggleVF'){
+      const VF_MODES = ['out','in','plus','minus'];
+      const idx = VF_MODES.indexOf(s.vfMode || 'out');
+      s.vfMode = VF_MODES[(idx+1) % VF_MODES.length];
+    }
+    else if(action === 'toggleArcArrow'){ s.arcArrow = !s.arcArrow; }
+    else if(action === 'toggleDash'){
+      const cur = s.lineStyle || 'solid';
+      s.lineStyle = cur === 'solid' ? 'dashed' : (cur === 'dashed' ? 'white' : 'solid');
+    }
+    else if(action === 'raise'){ raiseLayer(s.id); return; }
+    else if(action === 'lower'){ lowerLayer(s.id); return; }
+    else if(action === 'delete'){ shapes = shapes.filter(sh=>sh.id!==s.id); selectedId=null; updateSizeControlUI(); }
+    render();
+  });
+
+  window.addEventListener('keydown', function(e){
+    if(editingId != null) return;
+    if((e.key==='Delete' || e.key==='Backspace') && selectedId!=null){
+      e.preventDefault();
+      shapes = shapes.filter(sh=>sh.id!==selectedId);
+      selectedId = null;
+      updateSizeControlUI();
+      render();
+    }
+  });
+
+  /* ============================================================
+     THICKNESS SLIDER
+     ============================================================ */
+  thicknessInput.addEventListener('input', function(){
+    const s = getSelected();
+    if(s && s.type === 'label'){
+      s.fontSize = +this.value;
+      currentFontSize = s.fontSize;
+      thicknessVal.textContent = this.value + 'pt';
+      render();
+    } else {
+      currentStrokeWidth = +this.value;
+      thicknessVal.textContent = this.value + 'px';
+      if(s){ s.sw = currentStrokeWidth; render(); }
+    }
+  });
+
+  /* ============================================================
+     CUSTOM CONFIRM / MESSAGE DIALOG
+     (native confirm()/alert() are blocked in some sandboxed preview
+     frames, so this is a self-contained replacement)
+     ============================================================ */
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  const confirmMsg = document.getElementById('confirmMsg');
+  const confirmOk = document.getElementById('confirmOk');
+  const confirmCancel = document.getElementById('confirmCancel');
+
+  function showConfirm(message, onConfirm){
+    confirmMsg.textContent = message;
+    confirmCancel.style.display = '';
+    confirmOk.textContent = 'OK';
+    confirmOverlay.classList.remove('hidden');
+    function cleanup(){
+      confirmOverlay.classList.add('hidden');
+      confirmOk.removeEventListener('click', onOk);
+      confirmCancel.removeEventListener('click', onCancel);
+    }
+    function onOk(){ cleanup(); if(onConfirm) onConfirm(); }
+    function onCancel(){ cleanup(); }
+    confirmOk.addEventListener('click', onOk);
+    confirmCancel.addEventListener('click', onCancel);
+  }
+
+  function showMessage(message){
+    confirmMsg.textContent = message;
+    confirmCancel.style.display = 'none';
+    confirmOk.textContent = 'OK';
+    confirmOverlay.classList.remove('hidden');
+    function cleanup(){
+      confirmOverlay.classList.add('hidden');
+      confirmOk.removeEventListener('click', onOk);
+    }
+    function onOk(){ cleanup(); }
+    confirmOk.addEventListener('click', onOk);
+  }
+
+  /* ============================================================
+     CLEAR CANVAS
+     ============================================================ */
+  document.getElementById('clearBtn').addEventListener('click', function(){
+    if(shapes.length===0) return;
+    showConfirm('Clear the entire canvas? This cannot be undone.', function(){
+      shapes = []; selectedId = null; editingId = null; render();
+    });
+  });
+
+  /* ============================================================
+     SVG SIZING
+     ============================================================ */
+  function resizeSVG(){
+    const r = canvasWrap.getBoundingClientRect();
+    svg.setAttribute('width', r.width);
+    svg.setAttribute('height', r.height);
+    svg.setAttribute('viewBox', `0 0 ${r.width} ${r.height}`);
+    const MIN = 20;
+    if(!exportRect){
+      const inset = 8;
+      exportRect = { x: inset, y: inset, w: Math.max(r.width-2*inset, MIN), h: Math.max(r.height-2*inset, MIN) };
+    } else {
+      // Keep the export selection within the (possibly resized) canvas.
+      exportRect.x = Math.min(exportRect.x, Math.max(r.width-MIN, 0));
+      exportRect.y = Math.min(exportRect.y, Math.max(r.height-MIN, 0));
+      exportRect.w = Math.min(exportRect.w, r.width-exportRect.x);
+      exportRect.h = Math.min(exportRect.h, r.height-exportRect.y);
+    }
+    renderExportRect();
+  }
+  window.addEventListener('resize', ()=>{ resizeSVG(); render(); });
+
+  /* ============================================================
+     EXPORT SELECTION RECTANGLE
+     A dashed red rectangle the user can resize by its corner handles;
+     Save PNG crops the exported image to this region.
+     ============================================================ */
+  function renderExportRect(){
+    if(!exportRect) return;
+    const er = exportRect, hs = 7;
+    exportRectLayer.innerHTML = `
+      <rect x="${er.x}" y="${er.y}" width="${er.w}" height="${er.h}" fill="none" stroke="#e53935" stroke-width="2" stroke-dasharray="7 5" vector-effect="non-scaling-stroke" pointer-events="none"/>
+      <circle class="handle" data-handle="exportNW" cx="${er.x}" cy="${er.y}" r="${hs}" fill="#fff" stroke="#e53935" stroke-width="2.2"/>
+      <circle class="handle" data-handle="exportNE" cx="${er.x+er.w}" cy="${er.y}" r="${hs}" fill="#fff" stroke="#e53935" stroke-width="2.2"/>
+      <circle class="handle" data-handle="exportSW" cx="${er.x}" cy="${er.y+er.h}" r="${hs}" fill="#fff" stroke="#e53935" stroke-width="2.2"/>
+      <circle class="handle" data-handle="exportSE" cx="${er.x+er.w}" cy="${er.y+er.h}" r="${hs}" fill="#fff" stroke="#e53935" stroke-width="2.2"/>
+    `;
+  }
+
+  function startExportRectDrag(handle, e){
+    e.preventDefault(); e.stopPropagation();
+    const r0 = { ...exportRect };
+    const start = toCanvasCoords(e);
+    svg.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const cur = toCanvasCoords(ev);
+      const dx = cur.x - start.x, dy = cur.y - start.y;
+      let { x, y, w, h } = r0;
+      let nx = x, ny = y, nw = w, nh = h;
+      switch(handle){
+        case 'exportSE': nw = w+dx; nh = h+dy; break;
+        case 'exportNW': nw = w-dx; nh = h-dy; nx = x+dx; ny = y+dy; break;
+        case 'exportNE': nw = w+dx; nh = h-dy; ny = y+dy; break;
+        case 'exportSW': nw = w-dx; nh = h+dy; nx = x+dx; break;
+      }
+      const MIN = 20;
+      if(nw < MIN){ if(handle==='exportNW'||handle==='exportSW') nx -= (MIN-nw); nw = MIN; }
+      if(nh < MIN){ if(handle==='exportNW'||handle==='exportNE') ny -= (MIN-nh); nh = MIN; }
+      const canvasW = svg.clientWidth, canvasH = svg.clientHeight;
+      nx = Math.max(0, Math.min(nx, canvasW-MIN));
+      ny = Math.max(0, Math.min(ny, canvasH-MIN));
+      nw = Math.min(nw, canvasW-nx);
+      nh = Math.min(nh, canvasH-ny);
+      exportRect = { x:nx, y:ny, w:nw, h:nh };
+      renderExportRect();
+    }
+    function up(){ cleanup(); }
+    function cleanup(){
+      svg.removeEventListener('pointermove', move);
+      svg.removeEventListener('pointerup', up);
+      svg.removeEventListener('pointercancel', cleanup);
+      try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+    }
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', cleanup);
+  }
+
+  // SVG images containing <foreignObject> (used for text labels) taint the
+  // canvas when rasterized, which makes canvas.toBlob() throw a
+  // SecurityError. To avoid this, replace every foreignObject in the
+  // export clone with a plain SVG <text> element instead.
+  function replaceForeignObjectsForExport(clone){
+    clone.querySelectorAll('foreignObject').forEach(fo => {
+      const g = fo.closest('g.shape-g');
+      const id = g ? +g.dataset.id : null;
+      const s = id != null ? shapes.find(sh=>sh.id===id) : null;
+      if(s && s.type === 'label'){
+        const fs = s.fontSize || 20;
+        const tmp = document.createElement('div');
+        tmp.innerHTML = latexLiteToHTML(s.text || '');
+        const plainText = tmp.textContent || '';
+        const textEl = document.createElementNS('http://www.w3.org/2000/svg','text');
+        textEl.setAttribute('font-family','Arial,Helvetica,sans-serif');
+        textEl.setAttribute('font-size', fs+'pt');
+        textEl.setAttribute('fill', '#151515');
+        const lines = plainText.split('\n');
+        lines.forEach((line,i)=>{
+          const tspan = document.createElementNS('http://www.w3.org/2000/svg','tspan');
+          tspan.setAttribute('x','2');
+          tspan.setAttribute('dy', i===0 ? `${fs*0.9}` : `${fs*1.25}`);
+          tspan.textContent = line;
+          textEl.appendChild(tspan);
+        });
+        fo.parentNode.replaceChild(textEl, fo);
+      } else {
+        // Anything else (e.g. a label mid-edit, with a <textarea>) is
+        // simply dropped so it can't taint the canvas.
+        fo.remove();
+      }
+    });
+  }
+
+  /* ============================================================
+     PNG EXPORT
+     ============================================================ */
+  document.getElementById('downloadBtn').addEventListener('click', function(){
+    try{
+      const w = svg.clientWidth, h = svg.clientHeight;
+      const er = exportRect || { x:0, y:0, w, h };
+      const clone = svg.cloneNode(true);
+      clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+      clone.setAttribute('width', w);
+      clone.setAttribute('height', h);
+
+      const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      bg.setAttribute('x','0'); bg.setAttribute('y','0');
+      bg.setAttribute('width', w); bg.setAttribute('height', h);
+      bg.setAttribute('fill', '#ffffff');
+      clone.insertBefore(bg, clone.firstChild);
+
+      const handlesEl = clone.querySelector('#handlesLayer');
+      if(handlesEl) handlesEl.remove();
+      const exportRectEl = clone.querySelector('#exportRectLayer');
+      if(exportRectEl) exportRectEl.remove();
+      replaceForeignObjectsForExport(clone);
+
+      const svgStr = new XMLSerializer().serializeToString(clone);
+      const blob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = function(){
+        try{
+          const scale = 2;
+          const c = document.createElement('canvas');
+          c.width = er.w*scale; c.height = er.h*scale;
+          const ctx = c.getContext('2d');
+          // Crop to the export-selection rectangle (the dashed red box).
+          ctx.drawImage(img, er.x, er.y, er.w, er.h, 0, 0, er.w*scale, er.h*scale);
+          URL.revokeObjectURL(url);
+          c.toBlob(function(pngBlob){
+            const dlUrl = URL.createObjectURL(pngBlob);
+            let downloaded = false;
+            try{
+              const link = document.createElement('a');
+              link.download = 'physics-diagram.png';
+              link.href = dlUrl;
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              downloaded = true;
+            }catch(err){ downloaded = false; }
+            // Opening the export in a new tab as a fallback has been
+            // disabled — it was unnecessary.
+            // const opened = window.open(dlUrl, '_blank');
+            if(!downloaded){
+              showMessage('Could not start the download automatically. Try opening this page in a full browser tab and downloading again.');
+            }
+          });
+        }catch(err){
+          showMessage('Could not export the diagram: ' + err.message);
+        }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); showMessage('Could not export the diagram. Try again.'); };
+      img.src = url;
+    }catch(err){
+      showMessage('Could not export the diagram: ' + err.message);
+    }
+  });
+
+  /* ============================================================
+     INIT
+     ============================================================ */
+  buildToolbar();
+  applyGridMode();
+  resizeSVG();
+  render();
+  window.addEventListener('orientationchange', ()=>setTimeout(()=>{resizeSVG(); render();},300));
+})();
+</script>
+</body>
+</html>
